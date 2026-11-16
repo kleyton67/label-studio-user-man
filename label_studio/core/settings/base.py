@@ -250,6 +250,7 @@ INSTALLED_APPS = [
     'core',
     'users',
     'organizations',
+    'groups',
     'data_import',
     'data_export',
     'projects',
