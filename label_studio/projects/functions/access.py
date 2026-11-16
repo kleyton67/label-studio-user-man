@@ -5,17 +5,62 @@ from projects.models import Project
 from rest_framework.exceptions import PermissionDenied
 
 
-def accessible_projects(user):
-    """Projects in the user's active organization that org-wide operations may change for the user, as one queryset.
+def is_admin_user(user):
+    """Whether ``user`` is an admin for their active organization.
 
-    Lets callers scope an org-wide operation in one query instead of checking `Project.has_permission`
-    project by project. LSE overrides it through `settings.ACCESSIBLE_PROJECTS_FUNCTION` with its role and
-    workspace rules (project-list visibility).
+    Admin means: Django superuser, the ``is_admin`` flag (T2), or the organization owner
+    (``organization.created_by_id == user.id``). Admins see every project in the org.
+    """
+    if user.is_superuser:
+        return True
+    if getattr(user, 'is_admin', False):
+        return True
+    org = user.active_organization
+    if org is not None and org.created_by_id == user.id:
+        return True
+    return False
+
+
+def user_group_project_ids(user, organization_id):
+    """Project ids linked to the user's groups in ``organization_id``.
+
+    Walks ``UserGroupMember`` (scoped to groups of that org) -> ``UserGroupProject``.
+    Returns a flat ``values_list`` so callers can use it in ``id__in`` without an extra
+    subquery layer.
+    """
+    from groups.models import UserGroupMember
+
+    return (
+        UserGroupMember.objects.filter(
+            user=user,
+            group__organization_id=organization_id,
+        )
+        .values_list('group__project_links__project_id', flat=True)
+        .distinct()
+    )
+
+
+def accessible_projects(user):
+    """Projects the user may see in their active organization, as one queryset.
+
+    Restrictive: a non-admin user with no group membership sees nothing. Admins (owner,
+    ``is_admin`` flag, superuser) see every project in the org. Otherwise the visible
+    set is the union of projects granted to the user's groups.
+
+    Lets callers scope an org-wide operation in one query instead of checking
+    ``Project.has_permission`` project by project. LSE overrides it through
+    ``settings.ACCESSIBLE_PROJECTS_FUNCTION`` with its role and workspace rules
+    (project-list visibility).
     """
     organization = user.active_organization
     if organization is None or organization.has_deleted(user):
         return Project.objects.none()
-    return Project.objects.filter(organization=organization)
+    if is_admin_user(user):
+        return Project.objects.filter(organization=organization)
+    return Project.objects.filter(
+        organization=organization,
+        id__in=user_group_project_ids(user, organization.id),
+    )
 
 
 def filter_accessible(queryset, user, project_field='project'):
