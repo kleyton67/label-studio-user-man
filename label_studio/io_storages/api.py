@@ -49,8 +49,9 @@ class ImportStorageListAPI(StorageCreateMixin, generics.ListCreateAPIView):
         if not project_pk:
             raise ValidationError('query parameter "project" is required')
 
-        project = generics.get_object_or_404(Project, pk=project_pk)
-        self.check_object_permissions(self.request, project)
+        from projects.functions.access import get_permitted_project
+
+        project = get_permitted_project(self.request.user, project_pk)
         StorageClass = self.serializer_class.Meta.model
         storages = StorageClass.objects.filter(project_id=project.id)
 
@@ -95,8 +96,9 @@ class ExportStorageListAPI(StorageCreateMixin, generics.ListCreateAPIView):
         if not project_pk:
             raise ValidationError('query parameter "project" is required')
 
-        project = generics.get_object_or_404(Project, pk=project_pk)
-        self.check_object_permissions(self.request, project)
+        from projects.functions.access import get_permitted_project
+
+        project = get_permitted_project(self.request.user, project_pk)
         StorageClass = self.serializer_class.Meta.model
         storages = StorageClass.objects.filter(project_id=project.id)
 
