@@ -5,6 +5,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
+from groups.models import UserGroup, UserGroupMember, UserGroupProject
 from ml.models import MLBackend, MLBackendTrainJob
 from organizations.models import Organization, OrganizationMember
 from projects.models import Project
@@ -24,10 +25,11 @@ class UserAdminShort(UserAdmin):
             'username',
             'active_organization',
             'created_organization',
+            'is_admin',
             'is_staff',
             'is_superuser',
         )
-        self.list_filter = ('is_staff', 'is_superuser', 'is_active')
+        self.list_filter = ('is_admin', 'is_staff', 'is_superuser', 'is_active')
         self.search_fields = (
             'username',
             'first_name',
@@ -46,6 +48,7 @@ class UserAdminShort(UserAdmin):
                 {
                     'fields': (
                         'is_active',
+                        'is_admin',
                         'is_staff',
                         'is_superuser',
                     )
@@ -205,6 +208,27 @@ class ProjectAdmin(admin.ModelAdmin):
     search_fields = ('title', 'organization__title', 'organization__created_by__email', 'created_by__email')
 
 
+class UserGroupAdmin(admin.ModelAdmin):
+    list_display = ('id', 'organization', 'name', 'created_by', 'created_at')
+    list_filter = ('organization',)
+    search_fields = ('name', 'organization__title')
+    autocomplete_fields = ('organization', 'created_by')
+
+
+class UserGroupMemberAdmin(admin.ModelAdmin):
+    list_display = ('id', 'group', 'user', 'created_at')
+    list_filter = ('group__organization',)
+    search_fields = ('user__email', 'group__name')
+    autocomplete_fields = ('group', 'user')
+
+
+class UserGroupProjectAdmin(admin.ModelAdmin):
+    list_display = ('id', 'group', 'project', 'created_at')
+    list_filter = ('group__organization',)
+    search_fields = ('group__name', 'project__title')
+    autocomplete_fields = ('group', 'project')
+
+
 admin.site.register(User, UserAdminShort)
 admin.site.register(Project, ProjectAdmin)
 admin.site.register(MLBackend)
@@ -215,6 +239,9 @@ admin.site.register(Prediction, PredictionAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(OrganizationMember, OrganizationMemberAdmin)
 admin.site.register(AsyncMigrationStatus, AsyncMigrationStatusAdmin)
+admin.site.register(UserGroup, UserGroupAdmin)
+admin.site.register(UserGroupMember, UserGroupMemberAdmin)
+admin.site.register(UserGroupProject, UserGroupProjectAdmin)
 
 # remove unused django groups
 admin.site.unregister(Group)
