@@ -495,6 +495,9 @@ class TaskAPI(generics.RetrieveUpdateDestroyAPIView):
             pk=task_id,
         )
         self.check_object_permissions(self.request, lean_task)
+        # Group-based access check: user must have permission for the task's project
+        if not lean_task.project.has_permission(self.request.user):
+            raise PermissionDenied(f"You don't have access to project {lean_task.project.id}")
 
         # Now fetch full task with heavy queryset (prefetches, annotations, etc.)
         queryset = self.filter_queryset(self.get_queryset())
@@ -1002,6 +1005,9 @@ class AnnotationAPI(generics.RetrieveUpdateDestroyAPIView):
 
     serializer_class = AnnotationSerializer
     queryset = Annotation.objects.all()
+
+    def get_queryset(self):
+        return filter_accessible(Annotation.objects.all(), self.request.user, project_field='project')
 
     def perform_destroy(self, annotation):
         delete_annotation_with_retry(annotation)

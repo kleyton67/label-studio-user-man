@@ -892,6 +892,15 @@ class TestAnnotationConvertToDraftAPI(APITestCase):
         cls.other_annotator = UserFactory(active_organization=cls.organization)
         cls.organization.add_user(cls.other_annotator)
         cls.task = TaskFactory(project=cls.project, data={'text': 'test'})
+        
+        # T4/T5: grant group access so annotators can access the project
+        from groups.models import UserGroup, UserGroupMember, UserGroupProject
+        group = UserGroup.objects.create(
+            organization=cls.organization, name='TestGroup', created_by=cls.owner
+        )
+        UserGroupMember.objects.create(group=group, user=cls.annotator)
+        UserGroupMember.objects.create(group=group, user=cls.other_annotator)
+        UserGroupProject.objects.create(group=group, project=cls.project)
 
     def _convert(self, user, annotation):
         self.client.force_authenticate(user=user)
