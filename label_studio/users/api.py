@@ -2,16 +2,19 @@
 
 import logging
 
+from core.api_permissions import IsOrganizationAdmin
 from core.permissions import ViewClassPermission, all_permissions
 from django import forms
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from groups.models import UserGroup, UserGroupMember
 from projects.models import ProjectHotkeyPreference
-from rest_framework import generics, viewsets
+from rest_framework import generics, serializers, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, MethodNotAllowed, PermissionDenied
+from rest_framework.exceptions import APIException, MethodNotAllowed, PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -459,3 +462,171 @@ class UserHotkeysAPI(APIView):
         except Exception:
             logger.exception(f'Error updating hotkeys for user {request.user.pk}')
             return Response({'error': 'Failed to update hotkeys configuration'}, status=500)
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    """User representation for organization admins.
+
+    ``groups`` is a read-only list of ``{"id", "name"}`` objects; membership is managed
+    through ``AdminUserGroupsAPI``. The password hash is never part of the representation.
+    """
+
+    groups = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'email',
+            'username',
+            'first_name',
+            'last_name',
+            'is_active',
+            'is_admin',
+            'date_joined',
+            'last_activity',
+            'groups',
+        )
+        read_only_fields = ('id', 'date_joined', 'last_activity', 'groups')
+
+    def get_groups(self, instance) -> list[dict]:
+        return [
+            {'id': membership.group_id, 'name': membership.group.name}
+            for membership in instance.user_group_memberships.select_related('group').all()
+        ]
+
+
+class AdminUserCreateSerializer(AdminUserSerializer):
+    """Write serializer for ``POST /api/admin/users/``; ``password`` is write-only."""
+
+    password = serializers.CharField(write_only=True, required=True, allow_blank=False)
+
+    class Meta(AdminUserSerializer.Meta):
+        fields = AdminUserSerializer.Meta.fields + ('password',)
+        extra_kwargs = {'username': {'required': False}}
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        email = validated_data.pop('email')
+        validated_data.setdefault('username', email.split('@')[0])
+        return User.objects.create_user(email, password, **validated_data)
+
+
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    """Writable fields for ``PATCH /api/admin/users/<pk>/``."""
+
+    class Meta:
+        model = User
+        fields = ('email', 'first_name', 'last_name', 'is_active', 'is_admin')
+
+
+class AdminUserListAPI(generics.ListCreateAPIView):
+    """List users of the active organization and create accounts in it."""
+
+    permission_classes = [IsAuthenticated, IsOrganizationAdmin]
+    queryset = User.objects.all()
+
+    def get_queryset(self):
+        return User.objects.filter(organizations=self.request.user.active_organization)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AdminUserCreateSerializer
+        return AdminUserSerializer
+
+    def create(self, request, *args, **kwargs):
+        if request.user.active_organization is None:
+            raise PermissionDenied('You do not have an active organization to add users to')
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        organization = self.request.user.active_organization
+        instance.active_organization = organization
+        instance.save(update_fields=['active_organization'])
+        organization.add_user(instance)
+
+
+class AdminUserDetailAPI(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, patch and delete a user of the active organization."""
+
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAuthenticated, IsOrganizationAdmin]
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return User.objects.filter(organizations=self.request.user.active_organization)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        allowed_fields = {'email', 'first_name', 'last_name', 'is_active', 'is_admin'}
+        unsupported = set(request.data) - allowed_fields
+        if unsupported:
+            raise ValidationError({'detail': f'Cannot update field(s): {", ".join(sorted(unsupported))}'})
+
+        if 'is_admin' in request.data:
+            # Self-promotion/demotion and owner admin-status changes are not allowed through
+            # this API: the owner's status is inherent and an admin must not grant themselves
+            # a status the organization did not give them.
+            if instance.pk == request.user.pk:
+                raise PermissionDenied('You cannot change your own admin status')
+            if instance.has_organization:
+                raise PermissionDenied("The organization owner's admin status cannot be changed")
+
+        serializer = AdminUserUpdateSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(AdminUserSerializer(instance, context=self.get_serializer_context()).data)
+
+    def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            raise PermissionDenied('You cannot delete yourself')
+        if instance.has_organization:
+            # created_by is SET_NULL: deleting the owner breaks organization administration irreversibly
+            raise PermissionDenied('The organization owner cannot be deleted')
+        instance.delete()
+
+
+class AdminUserGroupsAPI(APIView):
+    """Read and replace the group membership of a user in the active organization."""
+
+    permission_classes = [IsAuthenticated, IsOrganizationAdmin]
+    parser_classes = (JSONParser, FormParser, MultiPartParser)
+
+    def get_queryset(self):
+        return User.objects.filter(organizations=self.request.user.active_organization)
+
+    def get(self, request, pk):
+        user = get_object_or_404(self.get_queryset(), pk=pk)
+        return Response({'groups': self._groups_payload(user)})
+
+    def put(self, request, pk):
+        user = get_object_or_404(self.get_queryset(), pk=pk)
+        group_ids = request.data.get('groups')
+        if not isinstance(group_ids, list):
+            raise ValidationError({'groups': 'Expected a list of group ids'})
+        try:
+            group_ids = [int(group_id) for group_id in group_ids]
+        except (TypeError, ValueError):
+            raise ValidationError({'groups': 'Group ids must be integers'})
+        group_ids = list(dict.fromkeys(group_ids))
+
+        organization = request.user.active_organization
+        valid_ids = list(
+            UserGroup.objects.filter(organization=organization, id__in=group_ids).values_list('id', flat=True)
+        )
+        if set(valid_ids) != set(group_ids):
+            raise ValidationError({'groups': 'One or more groups do not belong to the active organization'})
+
+        UserGroupMember.objects.filter(user=user).delete()
+        if valid_ids:
+            UserGroupMember.objects.bulk_create(
+                [UserGroupMember(user=user, group_id=group_id) for group_id in valid_ids], ignore_conflicts=True
+            )
+        return Response({'groups': self._groups_payload(user)})
+
+    def _groups_payload(self, user) -> list[dict]:
+        return [
+            {'id': membership.group_id, 'name': membership.group.name}
+            for membership in user.user_group_memberships.select_related('group').all()
+        ]
