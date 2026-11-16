@@ -133,6 +133,8 @@ class User(UserMixin, AbstractBaseUser, PermissionsMixin, UserLastActivityMixin)
         help_text=_('Designates whether to treat this user as active. Unselect this instead of deleting accounts.'),
     )
 
+    is_admin = models.BooleanField(_('admin'), default=False, db_default=False)
+
     date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
 
     activity_at = models.DateTimeField(_('last annotation activity'), auto_now=True)
