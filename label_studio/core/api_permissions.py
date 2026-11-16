@@ -12,3 +12,10 @@ class MemberHasOwnerPermission(BasePermission):
             return False
 
         return obj.has_permission(request.user)
+
+
+class IsOrganizationAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and request.user.has_perm('users.manage')
+        )

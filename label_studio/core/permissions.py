@@ -50,6 +50,11 @@ class AllPermissions(BaseModel):
     webhooks_view: str = 'webhooks.view'
     webhooks_change: str = 'webhooks.change'
     users_token_any: str = 'users.token.any'
+    users_manage: str = 'users.manage'
+    groups_view: str = 'groups.view'
+    groups_create: str = 'groups.create'
+    groups_change: str = 'groups.change'
+    groups_delete: str = 'groups.delete'
 
     storages_view: str = 'storages.view'
     storages_change: str = 'storages.change'
@@ -81,5 +86,25 @@ def make_perm(name, pred, overwrite=False):
     rules.add_perm(name, pred)
 
 
+def is_org_admin(user) -> bool:
+    return bool(
+        user.is_superuser
+        or getattr(user, 'is_admin', False)
+        or (
+            user.active_organization_id is not None
+            and user.active_organization.created_by_id == user.id
+        )
+    )
+
+
+admin_permissions = {
+    all_permissions.users_manage,
+    all_permissions.groups_view,
+    all_permissions.groups_create,
+    all_permissions.groups_change,
+    all_permissions.groups_delete,
+}
+
 for _, permission_name in all_permissions:
-    make_perm(permission_name, rules.is_authenticated)
+    predicate = is_org_admin if permission_name in admin_permissions else rules.is_authenticated
+    make_perm(permission_name, predicate)
