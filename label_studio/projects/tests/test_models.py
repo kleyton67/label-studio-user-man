@@ -127,13 +127,14 @@ class TestRearrangeOverlapCohort(TestCase):
 
 
 class TestProjectHasPermission(TestCase):
-    """LSO has one organization, so has_permission only has to reject revoked membership."""
+    """T4: has_permission is restrictive - non-admin without group access sees nothing."""
 
-    def test_member_is_allowed(self):
+    def test_member_without_group_is_rejected(self):
+        """Plain member without group membership cannot access projects (restrictive)."""
         project = ProjectFactory()
         user = UserFactory(active_organization=project.organization)
 
-        assert project.has_permission(user) is True
+        assert project.has_permission(user) is False
 
     def test_removed_member_is_rejected(self):
         project = ProjectFactory()

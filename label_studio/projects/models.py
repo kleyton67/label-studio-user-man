@@ -110,7 +110,11 @@ class ProjectManager(models.Manager):
         return ProjectQuerySetWithFSM(self.model, using=self._db)
 
     def for_user(self, user):
-        return self.get_queryset().filter(organization=user.active_organization)
+        # Import inside the method to avoid a circular import: access.py imports Project
+        # at module load, and Project.objects.for_user is called from access helpers.
+        from projects.functions.access import accessible_projects
+
+        return self.get_queryset().filter(pk__in=accessible_projects(user).values('pk'))
 
     def with_state(self):
         """

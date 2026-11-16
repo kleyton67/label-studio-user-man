@@ -177,7 +177,10 @@ class ProjectListAPI(generics.ListCreateAPIView):
         fields = self.get_requested_fields(serializer)
         sparse_fields = self.get_sparse_fields()
         filter = serializer.validated_data.get('filter')
-        projects = Project.objects.filter(organization=self.request.user.active_organization).order_by(
+        # Restrictive: scope by group access, not just organization membership.
+        from projects.functions.access import accessible_projects
+
+        projects = accessible_projects(self.request.user).order_by(
             F('pinned_at').desc(nulls_last=True), '-created_at'
         )
         search = serializer.validated_data.get('search')
@@ -397,7 +400,7 @@ class ProjectAPI(generics.RetrieveUpdateDestroyAPIView):
         serializer.is_valid(raise_exception=True)
         fields = serializer.validated_data.get('include')
         projects = Project.objects.with_counts(fields=fields).filter(
-            organization=self.request.user.active_organization
+            pk__in=Project.objects.for_user(self.request.user).values('pk')
         )
 
         # Only annotate FSM state for UI/API consumption when FSM state fields are enabled
@@ -459,6 +462,9 @@ class ProjectNextTaskAPI(generics.RetrieveAPIView):
     serializer_class = TaskWithAnnotationsAndPredictionsAndDraftsSerializer
     queryset = Project.objects.all()
 
+    def get_queryset(self):
+        return Project.objects.for_user(self.request.user)
+
     def get(self, request, *args, **kwargs):
         project = self.get_object()
         dm_queue = filters_ordering_selected_items_exist(request.data)
@@ -482,6 +488,9 @@ class ProjectNextTaskAPI(generics.RetrieveAPIView):
 class LabelStreamHistoryAPI(generics.RetrieveAPIView):
     permission_required = all_permissions.tasks_view
     queryset = Project.objects.all()
+
+    def get_queryset(self):
+        return Project.objects.for_user(self.request.user)
 
     def get(self, request, *args, **kwargs):
         project = self.get_object()

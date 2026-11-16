@@ -306,6 +306,15 @@ class TestProjectUsersOptionsAPI(APITestCase):
         cls.org_only_user = UserFactory(active_organization=cls.organization)
         ProjectMember.objects.create(project=cls.project, user=cls.first_member)
         ProjectMember.objects.create(project=cls.project, user=cls.second_member)
+        # T4: grant group access so members can see the project
+        from groups.models import UserGroup, UserGroupMember, UserGroupProject
+
+        group = UserGroup.objects.create(
+            organization=cls.organization, name='TestGroup', created_by=cls.organization.created_by
+        )
+        for user in (cls.first_member, cls.second_member):
+            UserGroupMember.objects.create(group=group, user=user)
+        UserGroupProject.objects.create(group=group, project=cls.project)
 
     def _list(self, user, query=''):
         self.client.force_authenticate(user)
@@ -342,6 +351,13 @@ class TestProjectUsersOptionsAPI(APITestCase):
         extra_members = UserFactory.create_batch(31, active_organization=self.organization)
         ProjectMember.objects.bulk_create(
             [ProjectMember(project=self.project, user=member) for member in extra_members]
+        )
+        # T4: also grant group access to extra members
+        from groups.models import UserGroupMember, UserGroupProject
+
+        group = self.first_member.user_group_memberships.first().group
+        UserGroupMember.objects.bulk_create(
+            [UserGroupMember(group=group, user=member) for member in extra_members]
         )
 
         first_page = self._list(self.first_member)
@@ -386,6 +402,18 @@ class TestProjectUsersColumnOptionsAPI(APITestCase):
         task = TaskFactory(project=cls.project, updated_by=cls.updated_by)
         AnnotationFactory(task=task, completed_by=cls.annotator, updated_by=cls.annotation_updated_by)
         AnnotationFactory(task=task, completed_by=cls.departed_annotator)
+
+        # T4: grant group access so members can see the project
+        from groups.models import UserGroup, UserGroupMember, UserGroupProject
+
+        group = UserGroup.objects.create(
+            organization=cls.project.organization,
+            name='TestGroup',
+            created_by=cls.project.organization.created_by,
+        )
+        for user in (cls.annotator, cls.updated_by, cls.annotation_updated_by, cls.non_participant):
+            UserGroupMember.objects.create(group=group, user=user)
+        UserGroupProject.objects.create(group=group, project=cls.project)
 
     def _list(self, column, **params):
         self.client.force_authenticate(self.owner)
