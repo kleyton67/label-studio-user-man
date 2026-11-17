@@ -74,6 +74,9 @@ docker-compose.override.yml
 .bash_history
 
 .pdm-python
+./postgres-data
+./mydata
+./deploy/nginx/certs
 
 # actions-hub
 .github/actions-hub
