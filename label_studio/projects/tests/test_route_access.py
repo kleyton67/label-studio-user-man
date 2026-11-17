@@ -16,7 +16,6 @@ import pytest
 from django.urls import reverse
 from groups.models import UserGroup, UserGroupMember, UserGroupProject
 from organizations.tests.factories import OrganizationFactory
-from projects.models import Project
 from projects.tests.factories import ProjectFactory
 from rest_framework.test import APIClient
 from tasks.models import Annotation, Task
@@ -144,7 +143,9 @@ class TestProjectTaskListAPIAccess:
         response = client.get(f'/api/projects/{project_a.id}/tasks/')
         assert response.status_code == 200
 
-    def test_member_cannot_list_tasks_in_non_granted_project(self, member_with_access, grant_project_a, project_b, task_in_b):
+    def test_member_cannot_list_tasks_in_non_granted_project(
+        self, member_with_access, grant_project_a, project_b, task_in_b
+    ):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.get(f'/api/projects/{project_b.id}/tasks/')
@@ -174,13 +175,17 @@ class TestTaskAPIAccess:
 
 
 class TestAnnotationAPIAccess:
-    def test_member_can_access_annotation_in_granted_project(self, member_with_access, grant_project_a, annotation_in_a):
+    def test_member_can_access_annotation_in_granted_project(
+        self, member_with_access, grant_project_a, annotation_in_a
+    ):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.get(f'/api/annotations/{annotation_in_a.id}/')
         assert response.status_code == 200
 
-    def test_member_cannot_access_annotation_in_non_granted_project(self, member_with_access, grant_project_a, annotation_in_b):
+    def test_member_cannot_access_annotation_in_non_granted_project(
+        self, member_with_access, grant_project_a, annotation_in_b
+    ):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.get(f'/api/annotations/{annotation_in_b.id}/')
@@ -188,13 +193,17 @@ class TestAnnotationAPIAccess:
 
 
 class TestAnnotationsListAPIAccess:
-    def test_member_can_list_annotations_in_granted_project(self, member_with_access, grant_project_a, task_in_a, annotation_in_a):
+    def test_member_can_list_annotations_in_granted_project(
+        self, member_with_access, grant_project_a, task_in_a, annotation_in_a
+    ):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.get(f'/api/tasks/{task_in_a.id}/annotations/')
         assert response.status_code == 200
 
-    def test_member_cannot_list_annotations_in_non_granted_project(self, member_with_access, grant_project_a, task_in_b, annotation_in_b):
+    def test_member_cannot_list_annotations_in_non_granted_project(
+        self, member_with_access, grant_project_a, task_in_b, annotation_in_b
+    ):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.get(f'/api/tasks/{task_in_b.id}/annotations/')
@@ -206,9 +215,7 @@ class TestImportAPIAccess:
         client = APIClient()
         client.force_authenticate(user=member_with_access)
         response = client.post(
-            f'/api/projects/{project_b.id}/import',
-            data={'data': [{'text': 'test'}]},
-            format='json'
+            f'/api/projects/{project_b.id}/import', data={'data': [{'text': 'test'}]}, format='json'
         )
         assert response.status_code in [403, 404]
 
@@ -217,17 +224,11 @@ class TestExportAPIAccess:
     def test_member_cannot_export_from_non_granted_project(self, member_with_access, grant_project_a, project_b):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
-        response = client.get(
-            f'/api/projects/{project_b.id}/export',
-            {'exportType': 'JSON'}
-        )
+        response = client.get(f'/api/projects/{project_b.id}/export', {'exportType': 'JSON'})
         assert response.status_code in [403, 404]
 
     def test_member_can_export_from_granted_project(self, member_with_access, grant_project_a, project_a):
         client = APIClient()
         client.force_authenticate(user=member_with_access)
-        response = client.get(
-            f'/api/projects/{project_a.id}/export',
-            {'exportType': 'JSON'}
-        )
+        response = client.get(f'/api/projects/{project_a.id}/export', {'exportType': 'JSON'})
         assert response.status_code == 200

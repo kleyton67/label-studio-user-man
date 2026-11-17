@@ -31,9 +31,7 @@ class UserGroupSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             conflicts = conflicts.exclude(pk=self.instance.pk)
         if conflicts.exists():
-            raise serializers.ValidationError(
-                {'name': 'A group with this name already exists in the organization.'}
-            )
+            raise serializers.ValidationError({'name': 'A group with this name already exists in the organization.'})
         return attrs
 
 

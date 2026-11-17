@@ -3,7 +3,6 @@
 import pytest
 from django.apps import apps
 from django.utils import timezone
-
 from groups.functions import backfill_default_groups
 from groups.models import UserGroup, UserGroupMember, UserGroupProject
 from organizations.models import OrganizationMember

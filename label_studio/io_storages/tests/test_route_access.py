@@ -19,7 +19,7 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 from groups.models import UserGroup, UserGroupMember, UserGroupProject
-from io_storages.localfiles.models import LocalFilesImportStorage, LocalFilesExportStorage
+from io_storages.localfiles.models import LocalFilesExportStorage, LocalFilesImportStorage
 from organizations.tests.factories import OrganizationFactory
 from projects.tests.factories import ProjectFactory
 from rest_framework.test import APIClient
@@ -121,7 +121,7 @@ class TestImportStorageListAPIAccess:
         response = client.get(url, {'project': project_b.id})
 
         # Should be 403 (permission denied) or 404 (project not found)
-        assert response.status_code in (403, 404), f"Expected 403/404, got {response.status_code}"
+        assert response.status_code in (403, 404), f'Expected 403/404, got {response.status_code}'
 
     def test_member_can_list_storage_from_granted_project(self, member_with_a, project_a, import_storage_a):
         """Member with access to project A can list storages for project A."""
@@ -161,9 +161,7 @@ class TestImportStorageListAPIAccess:
 
 
 class TestExportStorageListAPIAccess:
-    def test_member_cannot_list_export_storage_from_other_project(
-        self, member_with_a, project_b, export_storage_b
-    ):
+    def test_member_cannot_list_export_storage_from_other_project(self, member_with_a, project_b, export_storage_b):
         """Member with access to project A cannot list export storages for project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -190,9 +188,7 @@ class TestExportStorageListAPIAccess:
 
 
 class TestImportStorageDetailAPIAccess:
-    def test_member_cannot_retrieve_storage_from_other_project(
-        self, member_with_a, import_storage_b
-    ):
+    def test_member_cannot_retrieve_storage_from_other_project(self, member_with_a, import_storage_b):
         """Member with access to project A cannot retrieve storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -201,9 +197,7 @@ class TestImportStorageDetailAPIAccess:
 
         assert response.status_code in (403, 404)
 
-    def test_member_cannot_update_storage_from_other_project(
-        self, member_with_a, import_storage_b
-    ):
+    def test_member_cannot_update_storage_from_other_project(self, member_with_a, import_storage_b):
         """Member with access to project A cannot update storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -212,9 +206,7 @@ class TestImportStorageDetailAPIAccess:
 
         assert response.status_code in (403, 404)
 
-    def test_member_cannot_delete_storage_from_other_project(
-        self, member_with_a, import_storage_b
-    ):
+    def test_member_cannot_delete_storage_from_other_project(self, member_with_a, import_storage_b):
         """Member with access to project A cannot delete storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -223,9 +215,7 @@ class TestImportStorageDetailAPIAccess:
 
         assert response.status_code in (403, 404)
 
-    def test_member_can_retrieve_storage_from_granted_project(
-        self, member_with_a, import_storage_a
-    ):
+    def test_member_can_retrieve_storage_from_granted_project(self, member_with_a, import_storage_a):
         """Member with access to project A can retrieve storage from project A."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -251,9 +241,7 @@ class TestImportStorageDetailAPIAccess:
 
 
 class TestExportStorageDetailAPIAccess:
-    def test_member_cannot_retrieve_export_storage_from_other_project(
-        self, member_with_a, export_storage_b
-    ):
+    def test_member_cannot_retrieve_export_storage_from_other_project(self, member_with_a, export_storage_b):
         """Member with access to project A cannot retrieve export storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
@@ -278,28 +266,24 @@ class TestExportStorageDetailAPIAccess:
 
 
 class TestImportStorageSyncAPIAccess:
-    def test_member_cannot_sync_storage_from_other_project(
-        self, member_with_a, import_storage_b
-    ):
+    def test_member_cannot_sync_storage_from_other_project(self, member_with_a, import_storage_b):
         """Member with access to project A cannot sync storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
         url = reverse('storages:api:storage-localfiles-sync', kwargs={'pk': import_storage_b.id})
-        
+
         with patch.object(LocalFilesImportStorage, 'validate_connection', return_value=None):
             with patch.object(LocalFilesImportStorage, 'sync', return_value=None):
                 response = client.post(url)
 
         assert response.status_code in (403, 404)
 
-    def test_member_can_sync_storage_from_granted_project(
-        self, member_with_a, import_storage_a
-    ):
+    def test_member_can_sync_storage_from_granted_project(self, member_with_a, import_storage_a):
         """Member with access to project A can sync storage from project A."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
         url = reverse('storages:api:storage-localfiles-sync', kwargs={'pk': import_storage_a.id})
-        
+
         with patch.object(LocalFilesImportStorage, 'validate_connection', return_value=None):
             with patch.object(LocalFilesImportStorage, 'sync', return_value=None):
                 response = client.post(url)
@@ -312,7 +296,7 @@ class TestImportStorageSyncAPIAccess:
         client = APIClient()
         client.force_authenticate(user=admin_user)
         url = reverse('storages:api:storage-localfiles-sync', kwargs={'pk': import_storage_b.id})
-        
+
         with patch.object(LocalFilesImportStorage, 'validate_connection', return_value=None):
             with patch.object(LocalFilesImportStorage, 'sync', return_value=None):
                 response = client.post(url)
@@ -326,14 +310,12 @@ class TestImportStorageSyncAPIAccess:
 
 
 class TestExportStorageSyncAPIAccess:
-    def test_member_cannot_sync_export_storage_from_other_project(
-        self, member_with_a, export_storage_b
-    ):
+    def test_member_cannot_sync_export_storage_from_other_project(self, member_with_a, export_storage_b):
         """Member with access to project A cannot sync export storage from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
         url = reverse('storages:api:export-storage-localfiles-sync', kwargs={'pk': export_storage_b.id})
-        
+
         with patch.object(LocalFilesExportStorage, 'validate_connection', return_value=None):
             with patch.object(LocalFilesExportStorage, 'sync', return_value=None):
                 response = client.post(url)
@@ -345,7 +327,7 @@ class TestExportStorageSyncAPIAccess:
         client = APIClient()
         client.force_authenticate(user=admin_user)
         url = reverse('storages:api:export-storage-localfiles-sync', kwargs={'pk': export_storage_b.id})
-        
+
         with patch.object(LocalFilesExportStorage, 'validate_connection', return_value=None):
             with patch.object(LocalFilesExportStorage, 'sync', return_value=None):
                 response = client.post(url)
@@ -359,31 +341,27 @@ class TestExportStorageSyncAPIAccess:
 
 
 class TestTaskResolveStorageUriAccess:
-    def test_member_cannot_resolve_uri_from_task_in_other_project(
-        self, member_with_a, project_b, import_storage_b
-    ):
+    def test_member_cannot_resolve_uri_from_task_in_other_project(self, member_with_a, project_b, import_storage_b):
         """Member with access to project A cannot resolve URI from task in project B."""
         task = TaskFactory(project=project_b, data={'image': 's3://bucket/file.jpg'})
         client = APIClient()
         client.force_authenticate(user=member_with_a)
-        
+
         fileuri = base64.urlsafe_b64encode(b's3://bucket/file.jpg').decode()
         url = f'/tasks/{task.id}/resolve/'
         response = client.get(url, {'fileuri': fileuri})
 
         assert response.status_code in (403, 404)
 
-    def test_member_can_resolve_uri_from_task_in_granted_project(
-        self, member_with_a, project_a, import_storage_a
-    ):
+    def test_member_can_resolve_uri_from_task_in_granted_project(self, member_with_a, project_a, import_storage_a):
         """Member with access to project A can attempt to resolve URI from task in project A."""
         task = TaskFactory(project=project_a, data={'image': '/data/local-files/?d=test.jpg'})
         client = APIClient()
         client.force_authenticate(user=member_with_a)
-        
+
         fileuri = base64.urlsafe_b64encode(b'/data/local-files/?d=test.jpg').decode()
         url = f'/tasks/{task.id}/resolve/'
-        
+
         with patch.object(LocalFilesImportStorage, 'generate_http_url', return_value='http://example.com/test.jpg'):
             response = client.get(url, {'fileuri': fileuri})
 
@@ -395,10 +373,10 @@ class TestTaskResolveStorageUriAccess:
         task = TaskFactory(project=project_b, data={'image': '/data/local-files/?d=test.jpg'})
         client = APIClient()
         client.force_authenticate(user=admin_user)
-        
+
         fileuri = base64.urlsafe_b64encode(b'/data/local-files/?d=test.jpg').decode()
         url = f'/tasks/{task.id}/resolve/'
-        
+
         with patch.object(LocalFilesImportStorage, 'generate_http_url', return_value='http://example.com/test.jpg'):
             response = client.get(url, {'fileuri': fileuri})
 
@@ -411,29 +389,25 @@ class TestTaskResolveStorageUriAccess:
 
 
 class TestProjectResolveStorageUriAccess:
-    def test_member_cannot_resolve_uri_from_other_project(
-        self, member_with_a, project_b, import_storage_b
-    ):
+    def test_member_cannot_resolve_uri_from_other_project(self, member_with_a, project_b, import_storage_b):
         """Member with access to project A cannot resolve URI from project B."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
-        
+
         fileuri = base64.urlsafe_b64encode(b'/data/local-files/?d=test.jpg').decode()
         url = f'/projects/{project_b.id}/resolve/'
         response = client.get(url, {'fileuri': fileuri})
 
         assert response.status_code in (403, 404)
 
-    def test_member_can_resolve_uri_from_granted_project(
-        self, member_with_a, project_a, import_storage_a
-    ):
+    def test_member_can_resolve_uri_from_granted_project(self, member_with_a, project_a, import_storage_a):
         """Member with access to project A can attempt to resolve URI from project A."""
         client = APIClient()
         client.force_authenticate(user=member_with_a)
-        
+
         fileuri = base64.urlsafe_b64encode(b'/data/local-files/?d=test.jpg').decode()
         url = f'/projects/{project_a.id}/resolve/'
-        
+
         with patch.object(LocalFilesImportStorage, 'generate_http_url', return_value='http://example.com/test.jpg'):
             response = client.get(url, {'fileuri': fileuri})
 
@@ -443,10 +417,10 @@ class TestProjectResolveStorageUriAccess:
         """Admin can attempt to resolve URI from any project."""
         client = APIClient()
         client.force_authenticate(user=admin_user)
-        
+
         fileuri = base64.urlsafe_b64encode(b'/data/local-files/?d=test.jpg').decode()
         url = f'/projects/{project_b.id}/resolve/'
-        
+
         with patch.object(LocalFilesImportStorage, 'generate_http_url', return_value='http://example.com/test.jpg'):
             response = client.get(url, {'fileuri': fileuri})
 
@@ -469,7 +443,7 @@ class TestCrossOrgAccess:
                 title='Other Storage',
                 path='/tmp/test/other',
             )
-        
+
         client = APIClient()
         client.force_authenticate(user=member_with_a)
         url = reverse('storages:api:storage-localfiles-detail', kwargs={'pk': other_storage.id})

@@ -27,9 +27,9 @@ class AdminGroupListAPI(AdminGroupMixin, generics.ListCreateAPIView):
     serializer_class = UserGroupSerializer
 
     def get_queryset(self):
-        return UserGroup.objects.filter(
-            organization=self.request.user.active_organization
-        ).select_related('created_by')
+        return UserGroup.objects.filter(organization=self.request.user.active_organization).select_related(
+            'created_by'
+        )
 
     def perform_create(self, serializer):
         serializer.save(
@@ -42,9 +42,9 @@ class AdminGroupDetailAPI(AdminGroupMixin, generics.RetrieveUpdateDestroyAPIView
     serializer_class = UserGroupSerializer
 
     def get_queryset(self):
-        return UserGroup.objects.filter(
-            organization=self.request.user.active_organization
-        ).select_related('created_by')
+        return UserGroup.objects.filter(organization=self.request.user.active_organization).select_related(
+            'created_by'
+        )
 
 
 class AdminGroupMemberListAPI(AdminGroupMixin, generics.ListCreateAPIView):

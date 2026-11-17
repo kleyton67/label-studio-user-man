@@ -139,9 +139,6 @@ class TestAccessibleProjects:
 
 class TestHelpers:
     def test_is_admin_user_superuser(self):
-        from django.contrib.auth import get_user_model
-
-        User = get_user_model()
         user = UserFactory()
         user.is_superuser = True
         user.save(update_fields=['is_superuser'])
