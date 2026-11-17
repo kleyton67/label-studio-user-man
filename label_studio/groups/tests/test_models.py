@@ -5,7 +5,6 @@ from django.db import IntegrityError, transaction
 from groups.models import UserGroup
 from groups.tests.factories import UserGroupFactory, UserGroupMemberFactory, UserGroupProjectFactory
 from organizations.tests.factories import OrganizationFactory
-from projects.tests.factories import ProjectFactory
 from users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db

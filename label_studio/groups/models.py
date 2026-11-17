@@ -31,9 +31,7 @@ class UserGroup(models.Model):
 
 class UserGroupMember(models.Model):
     group = models.ForeignKey(UserGroup, on_delete=models.CASCADE, related_name='members')
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_group_memberships'
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_group_memberships')
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
 
     class Meta:

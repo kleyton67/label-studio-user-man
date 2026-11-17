@@ -127,9 +127,7 @@ class TestAdminUserDetailAPI(APITestCase):
     def test_admin_patch_rejects_unsupported_field(self):
         self.client.force_authenticate(self.admin)
 
-        response = self.client.patch(
-            f'/api/admin/users/{self.member.id}/', {'username': 'hacked'}, format='json'
-        )
+        response = self.client.patch(f'/api/admin/users/{self.member.id}/', {'username': 'hacked'}, format='json')
 
         assert response.status_code == 400
         self.member.refresh_from_db()
@@ -188,9 +186,7 @@ class TestAdminUserForbidden(APITestCase):
         assert self.client.delete(f'/api/admin/users/{self.owner.id}/').status_code == 403
         assert self.client.get(f'/api/admin/users/{self.owner.id}/groups/').status_code == 403
         assert (
-            self.client.put(
-                f'/api/admin/users/{self.owner.id}/groups/', {'groups': []}, format='json'
-            ).status_code
+            self.client.put(f'/api/admin/users/{self.owner.id}/groups/', {'groups': []}, format='json').status_code
             == 403
         )
 
@@ -223,9 +219,9 @@ class TestAdminUserGroupsAPI(APITestCase):
 
         assert response.status_code == 200
         assert response.json()['groups'] == [{'id': self.group.id, 'name': 'Reviewers'}]
-        assert list(
-            UserGroupMember.objects.filter(user=self.member).values_list('group_id', flat=True)
-        ) == [self.group.id]
+        assert list(UserGroupMember.objects.filter(user=self.member).values_list('group_id', flat=True)) == [
+            self.group.id
+        ]
 
         detail = self.client.get(f'/api/admin/users/{self.member.id}/')
         assert detail.status_code == 200
@@ -242,9 +238,9 @@ class TestAdminUserGroupsAPI(APITestCase):
 
         assert response.status_code == 200
         assert {group['id'] for group in response.json()['groups']} == {replacement.id}
-        assert list(
-            UserGroupMember.objects.filter(user=self.member).values_list('group_id', flat=True)
-        ) == [replacement.id]
+        assert list(UserGroupMember.objects.filter(user=self.member).values_list('group_id', flat=True)) == [
+            replacement.id
+        ]
 
     def test_put_empty_list_clears_groups(self):
         UserGroupMember.objects.create(user=self.member, group=self.group)

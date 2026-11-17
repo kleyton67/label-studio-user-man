@@ -180,9 +180,7 @@ class ProjectListAPI(generics.ListCreateAPIView):
         # Restrictive: scope by group access, not just organization membership.
         from projects.functions.access import accessible_projects
 
-        projects = accessible_projects(self.request.user).order_by(
-            F('pinned_at').desc(nulls_last=True), '-created_at'
-        )
+        projects = accessible_projects(self.request.user).order_by(F('pinned_at').desc(nulls_last=True), '-created_at')
         search = serializer.validated_data.get('search')
         if search:
             projects = search_projects(projects, search)

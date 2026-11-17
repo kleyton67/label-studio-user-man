@@ -90,10 +90,7 @@ def is_org_admin(user) -> bool:
     return bool(
         user.is_superuser
         or getattr(user, 'is_admin', False)
-        or (
-            user.active_organization_id is not None
-            and user.active_organization.created_by_id == user.id
-        )
+        or (user.active_organization_id is not None and user.active_organization.created_by_id == user.id)
     )
 
 
