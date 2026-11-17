@@ -115,34 +115,33 @@ export const GroupsPage = () => {
   const orgProjectsRequestedRef = useRef(false);
   const orgUsersRequestedRef = useRef(false);
 
-  const loadGroups = useCallback(async ({ initial = false } = {}) => {
-    const result = await api.callApi("adminGroups");
+  const loadGroups = useCallback(
+    async ({ initial = false } = {}) => {
+      const result = await api.callApi("adminGroups");
 
-    if (!mountedRef.current) return null;
+      if (!mountedRef.current) return null;
 
-    // callApi resolves to null after the global error handler already showed a message.
-    if (!Array.isArray(result)) {
-      setLoadError("Could not load groups.");
-      return null;
-    }
+      // callApi resolves to null after the global error handler already showed a message.
+      if (!Array.isArray(result)) {
+        setLoadError("Could not load groups.");
+        return null;
+      }
 
-    setGroups(result);
-    setLoadError(null);
+      setGroups(result);
+      setLoadError(null);
 
-    setSelectedId((current) => {
-      // Keep the selection when the group still exists; on the first load fall
-      // back to the first group, after a deletion to the empty placeholder.
-      const next = result.some((group) => group.id === current)
-        ? current
-        : initial
-          ? (result[0]?.id ?? null)
-          : null;
-      selectedIdRef.current = next;
-      return next;
-    });
+      setSelectedId((current) => {
+        // Keep the selection when the group still exists; on the first load fall
+        // back to the first group, after a deletion to the empty placeholder.
+        const next = result.some((group) => group.id === current) ? current : initial ? (result[0]?.id ?? null) : null;
+        selectedIdRef.current = next;
+        return next;
+      });
 
-    return result;
-  }, [api]);
+      return result;
+    },
+    [api],
+  );
 
   useEffect(() => {
     loadGroups({ initial: true });
@@ -330,7 +329,11 @@ export const GroupsPage = () => {
     setModalError(null);
     // The backend rejects users from another organization with a validation
     // error; surface it inside the picker instead of pretending success.
-    const [ok, failure] = await mutate("addAdminGroupMember", { params: { pk: groupId }, body: { user: user.id } }, "Member added");
+    const [ok, failure] = await mutate(
+      "addAdminGroupMember",
+      { params: { pk: groupId }, body: { user: user.id } },
+      "Member added",
+    );
     if (!ok) {
       setModalError(String(failure));
       return;
@@ -365,12 +368,12 @@ export const GroupsPage = () => {
     // No optimistic flip: the checkbox reflects the server, so a rejected grant
     // (e.g. a project that left the organization) cannot leave stale state.
     const [ok, failure] = checked
-      ? await mutate("addAdminGroupProject", { params: { pk: groupId }, body: { project: project.id } }, "Access granted")
-      : await mutate(
-          "deleteAdminGroupProject",
-          { params: { pk: groupId, projectPk: project.id } },
-          "Access revoked",
-        );
+      ? await mutate(
+          "addAdminGroupProject",
+          { params: { pk: groupId }, body: { project: project.id } },
+          "Access granted",
+        )
+      : await mutate("deleteAdminGroupProject", { params: { pk: groupId, projectPk: project.id } }, "Access revoked");
 
     if (!ok) {
       setDetailError(String(failure));
@@ -445,10 +448,7 @@ export const GroupsPage = () => {
                   dataTestId={`group-actions-trigger-${group.id}`}
                   content={
                     <Menu contextual>
-                      <Menu.Item
-                        onClick={() => openRename(group)}
-                        data-testid={`group-action-rename-${group.id}`}
-                      >
+                      <Menu.Item onClick={() => openRename(group)} data-testid={`group-action-rename-${group.id}`}>
                         Rename
                       </Menu.Item>
                       <Menu.Item
@@ -753,13 +753,19 @@ export const GroupsPage = () => {
               No eligible users left in this organization.
             </Typography>
           ) : (
-            <ul className="flex flex-col gap-tight max-h-[320px] overflow-y-auto" aria-label="Users to add" data-testid="picker-list">
+            <ul
+              className="flex flex-col gap-tight max-h-[320px] overflow-y-auto"
+              aria-label="Users to add"
+              data-testid="picker-list"
+            >
               {pickerCandidates.map((user) => (
                 <li key={user.id} className="flex items-center gap-tight">
                   <Avatar user={user} size="small" />
                   <span className="flex-1 min-w-0">
                     <span className="block truncate">
-                      {[user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.username || user.email}
+                      {[user.first_name, user.last_name].filter(Boolean).join(" ").trim() ||
+                        user.username ||
+                        user.email}
                     </span>
                     <span className="block truncate text-sm text-neutral-content-subtler">{user.email}</span>
                   </span>
@@ -811,4 +817,3 @@ GroupsPage.title = "Groups";
 GroupsPage.path = "/groups";
 
 export default GroupsPage;
-

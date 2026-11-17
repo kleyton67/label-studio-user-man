@@ -83,7 +83,13 @@ function makeApi(overrides = {}) {
       case "addAdminGroupMember": {
         const pk = Number(options.params.pk);
         const user = USERS.find((row) => row.id === Number(options.body.user));
-        const row = { id: nextMemberId++, group: pk, user: user.id, user_email: user.email, user_name: `${user.first_name} ${user.last_name}` };
+        const row = {
+          id: nextMemberId++,
+          group: pk,
+          user: user.id,
+          user_email: user.email,
+          user_name: `${user.first_name} ${user.last_name}`,
+        };
         members[pk] = [...(members[pk] ?? []), row];
         return { ...row };
       }
@@ -96,7 +102,12 @@ function makeApi(overrides = {}) {
       case "adminGroupProjects":
         return (grants[Number(options.params.pk)] ?? []).map((projectId) => {
           const project = PROJECTS.find((row) => row.id === projectId);
-          return { id: 500 + projectId, group: Number(options.params.pk), project: projectId, project_title: project?.title };
+          return {
+            id: 500 + projectId,
+            group: Number(options.params.pk),
+            project: projectId,
+            project_title: project?.title,
+          };
         });
       case "addAdminGroupProject": {
         const pk = Number(options.params.pk);
@@ -111,7 +122,12 @@ function makeApi(overrides = {}) {
       case "adminUsers":
         return USERS.map((user) => ({ ...user, is_active: true, is_admin: false }));
       case "projects":
-        return { count: PROJECTS.length, next: null, previous: null, results: PROJECTS.map((project) => ({ ...project })) };
+        return {
+          count: PROJECTS.length,
+          next: null,
+          previous: null,
+          results: PROJECTS.map((project) => ({ ...project })),
+        };
       default:
         return { ok: true };
     }
@@ -123,12 +139,18 @@ function makeApi(overrides = {}) {
 const crossOrgUserRejection = () => ({
   status: 400,
   error: "Bad Request",
-  response: { detail: "Validation error", validation_errors: { user: ["User is not an active member of the organization."] } },
+  response: {
+    detail: "Validation error",
+    validation_errors: { user: ["User is not an active member of the organization."] },
+  },
 });
 const crossOrgProjectRejection = () => ({
   status: 400,
   error: "Bad Request",
-  response: { detail: "Validation error", validation_errors: { project: ["Project does not belong to the organization."] } },
+  response: {
+    detail: "Validation error",
+    validation_errors: { project: ["Project does not belong to the organization."] },
+  },
 });
 
 function renderPage(api = makeApi()) {
@@ -166,8 +188,12 @@ describe("GroupsPage listing", () => {
     expect(screen.getByTestId("dataset-toggle-200")).not.toBeChecked();
     expect(screen.getByTestId("dataset-toggle-300")).not.toBeChecked();
 
-    expect(api.calls.some(({ endpoint, options }) => endpoint === "adminGroupMembers" && options.params.pk === 1)).toBe(true);
-    expect(api.calls.some(({ endpoint, options }) => endpoint === "adminGroupProjects" && options.params.pk === 1)).toBe(true);
+    expect(api.calls.some(({ endpoint, options }) => endpoint === "adminGroupMembers" && options.params.pk === 1)).toBe(
+      true,
+    );
+    expect(
+      api.calls.some(({ endpoint, options }) => endpoint === "adminGroupProjects" && options.params.pk === 1),
+    ).toBe(true);
     expect(api.calls.some(({ endpoint }) => endpoint === "projects")).toBe(true);
     expect(api.calls.some(({ endpoint }) => endpoint === "adminUsers")).toBe(true);
   });
@@ -180,7 +206,9 @@ describe("GroupsPage listing", () => {
     fireEvent.click(await screen.findByTestId("group-item-2"));
 
     await waitFor(() =>
-      expect(api.calls.some(({ endpoint, options }) => endpoint === "adminGroupMembers" && options.params.pk === 2)).toBe(true),
+      expect(
+        api.calls.some(({ endpoint, options }) => endpoint === "adminGroupMembers" && options.params.pk === 2),
+      ).toBe(true),
     );
     expect(await screen.findByTestId("members-empty")).toBeInTheDocument();
     expect(screen.getByTestId("dataset-toggle-100")).not.toBeChecked();
