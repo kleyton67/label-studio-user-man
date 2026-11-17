@@ -188,3 +188,18 @@ def user_account(request, sub_path=None):
         'users/user_account.html',
         {'settings': settings, 'user': user, 'user_profile_form': form},
     )
+
+
+@login_required
+def admin_view(request, sub_path=None):
+    """Admin area shell page.
+
+    The React app renders the admin UI and gates it on ``user.is_admin``; every
+    admin API endpoint re-checks that permission server-side, so serving the
+    empty shell to a logged-in non-admin exposes no data.
+    """
+    return render(
+        request,
+        'users/admin.html',
+        {'settings': settings, 'user': request.user},
+    )

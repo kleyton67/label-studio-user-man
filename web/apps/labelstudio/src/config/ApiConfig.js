@@ -16,6 +16,26 @@ export const API_CONFIG = {
     inviteLink: "/invite",
     resetInviteLink: "POST:/invite/reset-token",
 
+    // Admin (organization admin area: users & groups)
+    adminUsers: "/admin/users",
+    adminUser: "/admin/users/:pk",
+    createAdminUser: "POST:/admin/users",
+    updateAdminUser: "PATCH:/admin/users/:pk",
+    deleteAdminUser: "DELETE:/admin/users/:pk",
+    adminUserGroups: "/admin/users/:pk/groups",
+    updateAdminUserGroups: "PUT:/admin/users/:pk/groups",
+    adminGroups: "/admin/groups",
+    adminGroup: "/admin/groups/:pk",
+    createAdminGroup: "POST:/admin/groups",
+    updateAdminGroup: "PATCH:/admin/groups/:pk",
+    deleteAdminGroup: "DELETE:/admin/groups/:pk",
+    adminGroupMembers: "/admin/groups/:pk/members",
+    addAdminGroupMember: "POST:/admin/groups/:pk/members",
+    deleteAdminGroupMember: "DELETE:/admin/groups/:pk/members/:userPk",
+    adminGroupProjects: "/admin/groups/:pk/projects",
+    addAdminGroupProject: "POST:/admin/groups/:pk/projects",
+    deleteAdminGroupProject: "DELETE:/admin/groups/:pk/projects/:projectPk",
+
     // Project
     projects: "/projects",
     project: "/projects/:pk",
