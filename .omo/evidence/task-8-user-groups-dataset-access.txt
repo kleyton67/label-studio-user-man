@@ -1,0 +1,284 @@
+================================================================================
+T8 - Admin user API /api/admin/users + group assignment + tests
+================================================================================
+Date:        2026-11-16
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave3
+Branch:      ulw/user-groups-dataset-access-wave3
+Plan row:    .omo/plans/user-groups-dataset-access.md  row "- [ ] 8."
+Main checkout /root/workspace/projetos/label-studio was NOT edited (only this
+evidence file was written under .omo/evidence/).
+
+SCOPE (files touched by T8):
+  M label_studio/users/api.py            (+174/-2: imports + admin classes)
+  M label_studio/users/urls.py           (+4: admin routes)
+  ?? label_studio/users/tests/test_admin_api.py (new)
+NOT touched by T8: label_studio/groups/*, label_studio/users/admin.py
+(other workers own those; see dirty_worktree section).
+
+--------------------------------------------------------------------------------
+1. DIRTY WORKTREE (adversarial class: dirty_worktree)
+--------------------------------------------------------------------------------
+$ git status --short
+ M label_studio/core/urls.py            <-- T7/groups worker, not T8
+ M label_studio/groups/api.py           <-- T7/groups worker, not T8
+ M label_studio/groups/serializers.py   <-- T7/groups worker, not T8
+ M label_studio/groups/urls.py          <-- T7/groups worker, not T8
+ M label_studio/users/admin.py          <-- T9 worker, not T8
+ M label_studio/users/api.py            <-- T8
+ M label_studio/users/urls.py           <-- T8
+?? label_studio/groups/tests/test_api.py       <-- T7/groups worker, not T8
+?? label_studio/users/tests/test_admin_api.py  <-- T8
+?? label_studio/users/tests/test_admin_groups.py <-- another worker, not T8
+
+$ git diff --stat -- label_studio/users/api.py label_studio/users/urls.py
+ label_studio/users/api.py  | 175 ++++++++++++++++++++++++++++++++++++++++++++-
+ label_studio/users/urls.py |   4 ++
+ 2 files changed, 177 insertions(+), 2 deletions(-)
+
+$ git diff -- label_studio/users/urls.py
+@@ -30,6 +30,10 @@ urlpatterns = [
+     path('api/current-user/product-tour', product_tours_api.ProductTourAPI.as_view(), name='product-tour'),
+     path('api/current-user/hotkeys/', api.UserHotkeysAPI.as_view(), name='current-user-hotkeys'),
++    # Admin user management
++    path('api/admin/users/', api.AdminUserListAPI.as_view(), name='admin-user-list'),
++    path('api/admin/users/<int:pk>/', api.AdminUserDetailAPI.as_view(), name='admin-user-detail'),
++    path('api/admin/users/<int:pk>/groups/', api.AdminUserGroupsAPI.as_view(), name='admin-user-groups'),
+ ]
+
+The pre-existing UserAPI (users/api.py:128-216) was NOT modified: only imports were
+added at the top and new classes appended at the end of the file.
+
+--------------------------------------------------------------------------------
+2. CHANGES
+--------------------------------------------------------------------------------
+label_studio/users/api.py
+  - imports: core.api_permissions.IsOrganizationAdmin, django.shortcuts.get_object_or_404,
+    groups.models.UserGroup/UserGroupMember, rest_framework.serializers,
+    rest_framework.exceptions.ValidationError.
+  - AdminUserSerializer (ModelSerializer, model=User):
+      fields = id, email, username, first_name, last_name, is_active, is_admin,
+               date_joined, last_activity, groups
+      read_only_fields = id, date_joined, last_activity, groups
+      groups = SerializerMethodField -> [{"id": ..., "name": ...}] from
+               user.user_group_memberships.select_related("group")
+      (no password field, no password hash is ever serialized)
+  - AdminUserCreateSerializer(AdminUserSerializer): adds write-only `password`
+    (required), username optional (defaults to email local part); create() uses
+    User.objects.create_user -> hashes password; post_save signal auto-creates Token.
+  - AdminUserUpdateSerializer: writable email, first_name, last_name, is_active, is_admin.
+  - AdminUserListAPI(ListCreateAPIView), permission_classes=[IsAuthenticated,
+    IsOrganizationAdmin], queryset scoped to User.objects.filter(organizations=
+    request.user.active_organization); POST creates + sets active_organization +
+    organization.add_user(instance) (OrganizationMember). No active org -> 403.
+  - AdminUserDetailAPI(RetrieveUpdateDestroyAPIView), same permissions/scoping,
+    http_method_names=['get','patch','delete','head','options'] (no PUT).
+      PATCH: rejects fields outside {email,first_name,last_name,is_active,is_admin}
+        with 400; blocks changing is_admin of self or of the org owner (403);
+        validates via AdminUserUpdateSerializer.
+      DELETE: 403 on self; 403 on owner (created_by SET_NULL); else hard delete.
+  - AdminUserGroupsAPI(APIView), same permissions/scoping:
+      GET  -> {"groups": [{"id","name"}]}
+      PUT  -> body {"groups": [ids]}; requires list of ints; rejects ids not in the
+              active organization (400); replaces membership (delete + bulk_create
+              with ignore_conflicts, deduped); returns the new list.
+
+label_studio/users/urls.py
+  - routes: api/admin/users/, api/admin/users/<int:pk>/, api/admin/users/<int:pk>/groups/
+
+label_studio/users/tests/test_admin_api.py (new, 21 tests)
+  - admin list scoped to active org + password absent
+  - owner list; create (org membership, token, hashed password, 201)
+  - duplicate email 400; missing password 400
+  - retrieve; patch names/email; deactivate; unsupported field 400; delete member
+  - owner cannot be deleted (403, org.created_by intact); admin cannot delete self
+  - plain member 403 on every admin endpoint; anonymous 401
+  - groups GET empty; PUT assign reflects in UserGroupMember and detail serializer;
+    PUT replace; PUT empty clears; PUT other-org group 400; PUT non-list 400
+  - regression: member can still PATCH /api/users/<pk> (self-service) -> 200
+
+--------------------------------------------------------------------------------
+3. COMMANDS + REAL OUTPUTS
+--------------------------------------------------------------------------------
+=== 3a. required pytest command =============================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave3
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_api.py \
+      label_studio/users/tests/test_authz_api.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave3
+collected 25 items
+
+label_studio/users/tests/test_admin_api.py::TestAdminUserListAPI::test_admin_create_rejects_duplicate_email PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserListAPI::test_admin_create_requires_password PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserListAPI::test_admin_creates_user_in_active_organization PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserListAPI::test_admin_lists_users_scoped_to_active_organization PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserListAPI::test_owner_lists_users PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_cannot_delete_self PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_deactivates_user PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_deletes_member PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_patch_rejects_unsupported_field PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_patches_user PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_admin_retrieves_user PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserDetailAPI::test_organization_owner_cannot_be_deleted PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserForbidden::test_anonymous_is_denied PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserForbidden::test_plain_member_is_denied_every_admin_endpoint PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_get_groups_empty PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_put_assigns_groups_and_reflects_in_membership PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_put_empty_list_clears_groups PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_put_rejects_group_from_another_organization PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_put_rejects_non_list_body PASSED
+label_studio/users/tests/test_admin_api.py::TestAdminUserGroupsAPI::test_put_replaces_groups PASSED
+label_studio/users/tests/test_admin_api.py::TestSelfServiceUserAPIUnchanged::test_member_can_still_patch_self PASSED
+label_studio/users/tests/test_authz_api.py::TestUserDeleteAuthzAPI::test_member_cannot_delete_another_member PASSED
+label_studio/users/tests/test_authz_api.py::TestUserDeleteAuthzAPI::test_member_cannot_delete_self PASSED
+label_studio/users/tests/test_authz_api.py::TestUserDeleteAuthzAPI::test_organization_owner_cannot_be_deleted PASSED
+label_studio/users/tests/test_authz_api.py::TestUserDeleteAuthzAPI::test_owner_can_delete_member PASSED
+
+======================== 25 passed in 61.47s (0:01:01) =========================
+
+=== 3b. related users tests (regression check) =============================
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_api.py \
+      label_studio/users/tests/test_list_api.py label_studio/users/tests/test_serializers.py \
+      label_studio/users/tests/test_admin_permissions.py label_studio/users/tests/test_hotkeys_api.py -q
+5 failed, 35 passed, 10 subtests passed in 54.05s
+
+The 5 failures are all in test_hotkeys_api.py::ProjectHotkeysAPITestCase and are
+PRE-EXISTING (wave-2 project/group access enforcement), NOT caused by T8:
+verified by stashing only T8's two tracked files and re-running:
+$ git stash push -- label_studio/users/api.py label_studio/users/urls.py
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_hotkeys_api.py -q
+5 failed, 17 passed, 10 subtests passed in 40.60s
+$ git stash pop
+(identical 5 failures without T8's changes; e.g. test_project_hotkeys_are_isolated_by_user
+assert 403 == 200). test_api.py, test_list_api.py, test_serializers.py and
+test_admin_permissions.py all pass.
+
+=== 3c. manual QA (real HTTP, high port) ====================================
+Port note: 50080 was already held by ANOTHER worker's runserver
+(pid 1698289 at start, later 1702537), so T8 used port 50085 to avoid killing a
+process it does not own. Scratch DB: DATABASE_NAME=/tmp/opencode/t8-qa.sqlite3.
+
+$ DATABASE_NAME=/tmp/opencode/t8-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py migrate
+  ... token_blacklist.0013... OK
+  ... webhooks.0005... OK
+  (migrate exit 0)
+
+$ DATABASE_NAME=/tmp/opencode/t8-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell < /tmp/opencode/t8-seed.py
+ORG_ID 1
+OWNER_ID 1
+ADMIN_ID 2
+MEMBER_ID 3
+GROUP_ID 1
+OWNER_TOKEN d4efdbfe8503e76f431e33c48710dab63388034b
+ADMIN_TOKEN 02bdc80e63914e608e5567524273db53e00c465a
+MEMBER_TOKEN 41a622db1da301fd630c7bb0a97c5581c99ee1db
+  (owner is org creator and has users.manage via is_org_admin; admin is is_admin=True;
+   legacy API tokens explicitly enabled on org.jwt for QA)
+
+$ DATABASE_NAME=/tmp/opencode/t8-qa.sqlite3 DJANGO_DB=sqlite \
+    nohup uv run python label_studio/manage.py runserver 50085 --noreload &
+  PID 1701022
+  readiness poll: attempt 1 http 000, attempt 2 http 401 -> ready
+
+--- admin token: GET /api/admin/users/ -> 200 ---------------------------------
+[{"id":1,"email":"owner@example.com","username":"owner","first_name":"Owner","last_name":"QA","is_active":true,"is_admin":false,"date_joined":"2026-11-16T20:31:44.413864-03:00","last_activity":null,"groups":[]},{"id":2,"email":"admin@example.com","username":"admin","first_name":"Admin","last_name":"QA","is_active":true,"is_admin":true,"date_joined":"2026-11-16T20:31:44.812401-03:00","last_activity":null,"groups":[]},{"id":3,"email":"member@example.com","username":"member","first_name":"Member","last_name":"QA","is_active":true,"is_admin":false,"date_joined":"2026-11-16T20:31:45.194640-03:00","last_activity":null,"groups":[]}]
+
+--- admin token: POST /api/admin/users/ -> 201 -------------------------------
+request {"email":"qa-created@example.com","password":"StrongPassw0rd!","first_name":"QA","last_name":"Created"}
+{"id":4,"email":"qa-created@example.com","username":"qa-created","first_name":"QA","last_name":"Created","is_active":true,"is_admin":false,"date_joined":"2026-11-16T20:32:23.316114-03:00","last_activity":null,"groups":[]}
+  (no password field in response)
+
+--- admin token: PATCH /api/admin/users/4/ deactivate -> 200 -----------------
+request {"is_active":false}
+{"id":4,...,"is_active":false,...,"groups":[]}
+
+--- admin token: PUT /api/admin/users/4/groups/ -> 200 ------------------------
+request {"groups":[1]}
+{"groups":[{"id":1,"name":"QA Group"}]}
+
+--- admin token: GET /api/admin/users/4/groups/ -> 200 ------------------------
+{"groups":[{"id":1,"name":"QA Group"}]}
+
+--- admin token: GET /api/admin/users/4/ -> 200 -------------------------------
+{"id":4,...,"is_active":false,...,"groups":[{"id":1,"name":"QA Group"}]}
+
+--- admin token: DELETE /api/admin/users/1/ (owner) -> 403 BLOCKED -----------
+{"status_code":403,"detail":"The organization owner cannot be deleted"}
+
+--- member token: GET /api/admin/users/ -> 403 -------------------------------
+{"status_code":403,"detail":"You do not have permission to perform this action."}
+
+--- member token: POST /api/admin/users/ -> 403 -----------------------------
+{"status_code":403,"detail":"You do not have permission to perform this action."}
+
+--- member token: PATCH /api/users/3/ (self-service regression) -> 200 -------
+request {"first_name":"MemberPatched"}
+{"id":3,"first_name":"MemberPatched","last_name":"QA","username":"member","email":"member@example.com",...}
+
+--- DB state after QA --------------------------------------------------------
+user4 <QuerySet [(4, 'qa-created@example.com', False, 1)]>
+memberships [(4, 1)]
+token4 True
+
+--- teardown ------------------------------------------------------------------
+T8 server PID 1701022 killed; port 50085 closed (no listener); connection refused.
+Scratch DB /tmp/opencode/t8-qa.sqlite3 deleted. /tmp/opencode/t8-* temp files removed.
+(50080 left running: it belongs to another worker, not T8.)
+
+--------------------------------------------------------------------------------
+4. ADVERSARIAL CLASSES
+--------------------------------------------------------------------------------
+- misleading_success_output: PASS. The pytest tail above ("25 passed in 61.47s")
+  and the curl status codes are real output captured in this session. No output
+  was fabricated. The 5 hotkeys failures are reported explicitly, not hidden.
+- stale_state: PASS. QA ran against a freshly migrated scratch DB seeded in the
+  same run; the live responses show is_active=false after PATCH and the group
+  membership after PUT, and the DB query confirms user4/active_organization=1,
+  UserGroupMember (4,1), token4 True. Nothing was read from a stale DB.
+- dirty_worktree: PASS. git status/diff above; T8 touched only users/api.py,
+  users/urls.py and the new users/tests/test_admin_api.py. The other modified
+  files are concurrent workers' (groups/*, users/admin.py, core/urls.py).
+- security: PASS. Plain member -> 403 on GET/POST list and (per tests) detail/
+  groups endpoints; anonymous -> 401; owner delete -> 403 with org.created_by
+  intact; no password field in any admin response (real curl bodies show none);
+  PATCH rejects `groups`/`username` and any non-allowed field (400); PUT groups
+  validates every id against the active organization (400 otherwise); group
+  membership is scoped to the admin's active org.
+- performance: PASS. List/detail serializers use
+  user_group_memberships.select_related("group") (one query, no N+1); PUT
+  validates ids with one WHERE id__in query and replaces membership with one
+  DELETE + one bulk_create. No per-item queries on the write path.
+
+--------------------------------------------------------------------------------
+5. RISKS
+--------------------------------------------------------------------------------
+- Password strength: AdminUserCreateSerializer requires a non-empty password but
+  does not run Django's AUTH_PASSWORD_VALIDATORS. Admins are trusted and the
+  plan did not require strength rules; if desired, add validate_password in a
+  follow-up.
+- PATCH is_admin guard: T8 blocks an admin from changing their own is_admin and
+  from changing the org owner's is_admin (narrow reading of the plan's "no
+  self-promotion / owner" Must NOT). Non-owner admins can still grant is_admin to
+  regular members; if stricter semantics are wanted, restrict is_admin changes to
+  the org owner.
+- AdminUserGroupsAPI returns {"groups": [...]} (object wrapper) while
+  AdminUserSerializer embeds "groups" as a list; shapes are documented in tests.
+- Port deviation: QA used 50085 because 50080 was occupied by another worker's
+  runserver; the T8 server was killed and 50080 was left untouched.
+- Pre-existing failures in test_hotkeys_api.py (5) are unrelated to T8 (proven by
+  stash); they come from wave-2 access enforcement and should be handled by that
+  task owner.
+
+--------------------------------------------------------------------------------
+6. CLEANUP
+--------------------------------------------------------------------------------
+- T8 runserver (PID 1701022) killed; port 50085 closed and verified.
+- Scratch DB /tmp/opencode/t8-qa.sqlite3 removed.
+- /tmp/opencode/t8-seed.py, t8-seed.log, t8-server.log, t8-server.pid,
+  t8-pytest.log, t8-curl.log removed.
+- No commit, no push. Dev DB (/root/.local/share/label-studio/label_studio.sqlite3)
+  untouched; QA used a dedicated DATABASE_NAME.
+================================================================================

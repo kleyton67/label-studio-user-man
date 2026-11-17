@@ -1,0 +1,220 @@
+# Task T14 — End-to-end integration test + docs + final build/lint
+# Worktree: /root/workspace/projetos/label-studio-wt/ugda-wave5
+# Branch:   ulw/user-groups-dataset-access-wave5
+# Base:     ab1db2151 (merge: wave 4 - area admin frontend)
+# Date:     2026-11-17 (session ~23:45 - 00:05 -03)
+# Plan row: - [ ] 14. Integração ponta a ponta + docs + verificação final
+
+================================================================================
+ARTIFACTS (changed files)
+================================================================================
+NEW  label_studio/tests/test_admin_groups_integration.py (11 tests)
+     End-to-end pytest (pytest-django + DRF APIClient) driving only HTTP surfaces:
+     admin creates group -> adds member -> grants project through /api/admin/groups/*;
+     member then sees exactly that project in /api/projects/ and in the Data Manager
+     task list (/api/tasks/?project=...); revoke (and member removal) drops access;
+     a group-less member sees nothing; owner/admin see all; plain member and anonymous
+     are denied (403) on every /api/admin/* endpoint; cross-org grant does not leak.
+     Reuses factories/patterns from projects/tests/test_access.py, groups/tests/test_api.py,
+     users/tests/test_admin_api.py. No product code edited.
+
+NEW  docs/source/guide/admin.md
+     Concise operational page (facts only): admin area + who is an admin, Users page,
+     Groups page, per-group dataset access, restrictive semantics, default-group
+     backfill, /api/admin/ endpoint table. Frontmatter matches docs style
+     (tier: opensource, order: 373, order_enterprise: 0, section "Manage Your Organization").
+
+NOT touched: any product code, any frontend file. (Two files modified in the worktree
+during the session — label_studio/groups/serializers.py and groups/tests/test_api.py —
+belong to a CONCURRENT T15 worker, not to this task; see RISKS.)
+
+================================================================================
+1) NEW INTEGRATION TEST ALONE
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave5
+$ DJANGO_DB=sqlite uv run pytest label_studio/tests/test_admin_groups_integration.py -vv
+...
+label_studio/tests/test_admin_groups_integration.py::TestAdminGrantFlow::test_member_sees_exactly_the_granted_project PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminGrantFlow::test_member_dm_task_list_shows_granted_project_tasks PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminGrantFlow::test_revoke_project_grant_removes_member_access PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminGrantFlow::test_remove_member_removes_access PASSED
+label_studio/tests/test_admin_groups_integration.py::TestVisibilityMatrix::test_member_without_group_sees_no_projects PASSED
+label_studio/tests/test_admin_groups_integration.py::TestVisibilityMatrix::test_owner_sees_all_projects PASSED
+label_studio/tests/test_admin_groups_integration.py::TestVisibilityMatrix::test_admin_sees_all_projects PASSED
+label_studio/tests/test_admin_groups_integration.py::TestVisibilityMatrix::test_admin_grant_does_not_leak_across_organizations PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminApiGate::test_plain_member_is_forbidden_on_group_admin_endpoints PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminApiGate::test_plain_member_is_forbidden_on_user_admin_endpoints PASSED
+label_studio/tests/test_admin_groups_integration.py::TestAdminApiGate::test_anonymous_is_rejected_on_admin_endpoints PASSED
+======== 11 passed in 26.45s ========
+
+(After `ruff format`, re-run: 11 passed in 25.63s.)
+
+================================================================================
+2) FULL ACCEPTANCE SUITE
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave5
+$ DJANGO_DB=sqlite uv run pytest label_studio/tests/test_admin_groups_integration.py \
+      label_studio/groups/tests label_studio/users/tests label_studio/projects/tests -vv
+...
+======== 5 failed, 343 passed, 36 subtests passed in 215.33s (0:03:35) ========
+
+All 11 T14 integration tests PASSED. The 2 extra passes vs. the first run are the
+concurrent T15 tests (test_duplicate_name_in_same_organization_returns_400,
+test_same_name_in_other_organization_is_allowed), which also PASSED.
+
+FAILED (all 5 in users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase):
+  test_empty_project_hotkeys_deletes_preference            - assert 403 == 200
+  test_get_project_hotkeys_without_preference              - assert 403 == 200
+  test_patch_project_hotkeys_creates_preference_not_membership - assert 403 == 200
+  test_project_hotkeys_are_isolated_by_project             - assert 403 == 200
+  test_project_hotkeys_are_isolated_by_user                - assert 403 == 200
+Root cause (product, from waves 1-4): users/hotkeys.py::get_hotkey_project calls
+project.has_permission(user); under the T4 restrictive semantics a plain org member
+with no group grant is denied, so these tests (which never grant a group) now 403.
+
+--------------------------------------------------------------------------------
+2b) PROOF THE 5 FAILURES ARE PRE-EXISTING ON BASE ab1db2151
+--------------------------------------------------------------------------------
+A clean detached worktree at ab1db2151 was created, and the same test file was run
+with the same venv; the import path was verified to resolve inside the base worktree:
+
+$ git worktree add --detach /tmp/opencode/base-ab1db2151 ab1db2151
+$ cd /tmp/opencode/base-ab1db2151
+$ /root/.../ugda-wave5/.venv/bin/python -c "import label_studio; print(label_studio.__file__)"
+label_studio from: /tmp/opencode/base-ab1db2151/label_studio/__init__.py
+$ DJANGO_DB=sqlite .../python -m pytest label_studio/users/tests/test_hotkeys_api.py -vv
+...
+============== 5 failed, 17 passed, 10 subtests passed in 38.33s ===============
+Identical 5 failures, identical `PermissionDenied: You do not have access to this
+project.` from label_studio/users/hotkeys.py:24. => pre-existing at base, not caused
+by T14. The base worktree was removed afterwards (`git worktree remove --force`).
+
+================================================================================
+3) DOCS
+================================================================================
+$ ls -l docs/source/guide/admin.md
+-rw-r--r-- 1 root root 3387 ... docs/source/guide/admin.md
+Frontmatter: title "Admin area, user groups and dataset access", tier opensource,
+order 373, order_enterprise 0, section "Manage Your Organization". Content is
+operational/factual (admin definition, Users, Groups, restrictive semantics,
+default-group backfill, admin API table); no marketing copy.
+
+================================================================================
+4) BUILD / LINT
+================================================================================
+$ cd web && bun run build
+...
+✓ 11289 modules transformed.
+dist/apps/labelstudio/main-*.js   2,219.86 kB │ gzip: 719.07 kB
+✓ built in 26.53s
+⚡ Done in 14ms
+[service-worker] precached 18 entries (~8897154 bytes manifest payload)
+=> BUILD GREEN. Generated static files restored (see CLEANUP).
+
+$ cd web && bunx biome check .          # read-only (bun run lint uses --write)
+Checked 2470 files in 5s. No fixes applied.
+Found 3 errors.   (all formatter errors, all pre-existing, none in T14 files)
+  apps/labelstudio/src/pages/Admin/GroupsPage.jsx format       ×
+  apps/labelstudio/src/pages/Admin/GroupsPage.test.jsx format  ×
+  apps/labelstudio/src/pages/Admin/index.js format             ×
+These three files are committed at base ab1db2151 and were NOT modified by T14
+(`git status` shows no web/ changes). `bun run lint` was not used because it runs
+`biome check --write .` and would edit product frontend files, which T14 must not do.
+
+$ uvx ruff check label_studio/tests/test_admin_groups_integration.py
+All checks passed!
+$ uvx ruff format --check label_studio/tests/test_admin_groups_integration.py
+1 file already formatted
+
+================================================================================
+5) MANUAL QA — REAL BROWSER (Playwright Chromium 1228, headless, real Django + vite HMR)
+================================================================================
+Stack: Django 127.0.0.1:50092 (runserver --noreload, FRONTEND_HMR=true,
+FRONTEND_HOSTNAME=http://localhost:50093) + vite dev 127.0.0.1:50093.
+Scratch DB only: BASE_DATA_DIR=/tmp/opencode/qa-t14/data (sqlite). The real dev DB
+(~/.local/share/label-studio) was NOT used.
+Seed: t14_owner (is_admin), t14_admin (is_admin), t14_member (plain); org "T14 QA Org";
+projects "Alpha QA" (id 1, 2 tasks) and "Beta QA" (id 2, 2 tasks).
+
+$ NODE_PATH=/tmp/opencode/qa/node_modules node qa.cjs
+PASS gate: member visiting /admin/groups/ is redirected home — http://localhost:50092/
+PASS baseline: member with no group sees zero datasets — []
+PASS gate: member GET /api/admin/groups/ -> 403 — 403
+PASS gate: member GET /api/admin/users/ -> 403 — 403
+PASS admin: groups page opens on an empty organization
+PASS admin: group created through the UI
+PASS admin: member added through the UI — ...t14_member@example.com...Remove
+PASS admin: dataset grant toggled in the UI
+PASS server truth: grant persisted via API — [{"id":1,"group":1,"project":1,"project_title":"Alpha QA",...}]
+PASS enforcement: member /api/projects/ shows exactly the granted dataset — ["Alpha QA"]
+PASS enforcement: member DM task list for granted project -> 200 with its tasks — {"status":200,"total":2,"ids":[1,2]}
+PASS enforcement: member DM task list for non-granted project -> 404 — {"status":404,"ids":null}
+PASS enforcement: revoking removes the dataset from member /api/projects/ — []
+PASS cleanup: probe group deleted
+=> 14/14 PASS, exit 0. Real end-to-end proof on the real surface (browser UI as admin,
+   member's own session cookie for the API checks, server-truth re-query after UI grant).
+
+Screenshots (.omo/evidence/):
+  task-14-admin-groups-granted.png  admin Groups page with the grant checked
+  task-14-member-projects.png        member Projects page after the grant
+  task-14-member-redirect.png        non-admin bounced from /admin/groups to /
+
+================================================================================
+CLEANUP
+================================================================================
+- QA servers killed; `ss -tlnp` shows :50092/:50093 clear; no runserver/vite procs left.
+- Scratch DB + seed removed: /tmp/opencode/qa-t14 deleted (verified gone).
+- Build artifacts: tracked label_studio/core/static/js/sw.js restored via `git checkout`;
+  untracked generated manifest.json / sw.js.map removed. `git status` back to the
+  same set as turn start (T15's 2 modified files + this task's 2 new files).
+- No commits, no pushes. No product code edited by T14.
+
+================================================================================
+ADVERSARIAL REVIEW
+================================================================================
+misleading_success_output: REPLIED. All numbers above are pasted from real runs. The
+  browser QA re-queried server truth through the API after each UI mutation (grant
+  persisted; member /api/projects/ changed to ["Alpha QA"] then to [] after revoke;
+  DM 200/404). No optimistic-UI assumption: the member's visibility was read from the
+  server with the member's own session, not inferred from the checkbox.
+stale_state: REPLIED. The integration test, the full suite, ruff and the browser QA
+  were all run on the final tree (after `ruff format`; after the last T15 edit). The
+  full suite was re-run a second time on the settled tree (343 passed / 5 pre-existing).
+dirty_worktree: REPLIED. Final `git status` = 2 modified files owned by the concurrent
+  T15 worker + this task's 2 new files; build static artifacts restored; scratch DB and
+  servers removed. T14 edited no product code.
+security: REPLIED. Admin APIs deny plain member (403) and anonymous (401/403) on both
+  /api/admin/groups/* and /api/admin/users/* (tested). Cross-organization grant does
+  not leak (tested). Admin area gate verified in-browser (member redirected, no render).
+performance: REPLIED. T14 added only tests + docs; no runtime/query changes. The
+  restrictive access path is a single `id__in` subquery over UserGroupMember ->
+  UserGroupProject (distinct), unchanged by this task.
+
+================================================================================
+RISKS / NOTES
+================================================================================
+- 5 pre-existing failures in users/tests/test_hotkeys_api.py (proven at base
+  ab1db2151). Product defect from waves 1-4: per-project hotkey endpoints deny plain
+  members who have no group grant. Reported, not fixed (T14 must not edit product code).
+- Repo-wide `biome check` has 3 pre-existing formatter errors in T11/T13 Admin files
+  (GroupsPage.jsx, GroupsPage.test.jsx, index.js), unmodified by T14. `bun run lint`
+  (`--write`) was deliberately not run to avoid editing product code.
+- CONCURRENCY: a separate T15 worker edited label_studio/groups/serializers.py and
+  groups/tests/test_api.py in this worktree during the session. T14 did not touch,
+  revert, or commit them; the final suite run includes their (passing) changes.
+- The plan's T15 follow-up is therefore already applied in the worktree by that worker.
+
+================================================================================
+COMMAND LOG (condensed)
+================================================================================
+1. DJANGO_DB=sqlite uv run pytest label_studio/tests/test_admin_groups_integration.py -vv -> 11 passed
+2. uvx ruff check + ruff format --check (new py)                               -> clean
+3. DJANGO_DB=sqlite uv run pytest <integration + groups + users + projects> -vv -> 5 failed, 343 passed
+4. git worktree add --detach /tmp/opencode/base-ab1db2151 ab1db2151 + hotkeys test -> 5 failed (pre-existing)
+5. git worktree remove --force /tmp/opencode/base-ab1db2151
+6. cd web && bun run build                                                       -> built in 26.53s
+7. cd web && bunx biome check .                                                   -> 3 pre-existing formatter errors
+8. restore sw.js / remove generated manifest.json+sw.js.map
+9. BASE_DATA_DIR=/tmp/opencode/qa-t14/data manage.py migrate + seed.py
+10. Django :50092 + vite :50093 (FRONTEND_HMR) + node qa.cjs                  -> 14/14 PASS
+11. kill servers; verify ports clear; rm -rf /tmp/opencode/qa-t14

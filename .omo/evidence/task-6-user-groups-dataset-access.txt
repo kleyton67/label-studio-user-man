@@ -1,0 +1,249 @@
+================================================================================
+T6 - Enforcement em storages/resolve/proxy + testes
+================================================================================
+Date:        2026-11-16
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave2
+Branch:      ulw/user-groups-dataset-access-wave2
+Plan row:    .omo/plans/user-groups-dataset-access.md  row "- [ ] 6."
+Main checkout /root/workspace/projetos/label-studio was NOT edited (only this
+evidence file was written under .omo/evidence/).
+
+--------------------------------------------------------------------------------
+1. DIRTY WORKTREE (adversarial class: dirty_worktree)
+--------------------------------------------------------------------------------
+git status --short (T6 changes only):
+
+ M label_studio/io_storages/api.py
+?? label_studio/io_storages/tests/test_route_access.py
+
+git diff --stat (T6 files only):
+ label_studio/io_storages/api.py                        | 12 ++++++------
+ label_studio/io_storages/tests/test_route_access.py    | 450 +++++++++++++++++
+
+Changes:
+- label_studio/io_storages/api.py: ImportStorageListAPI.get_queryset and
+  ExportStorageListAPI.get_queryset now use get_permitted_project(user, pk)
+  instead of Project.objects.get(pk) + check_object_permissions. This provides
+  consistent 404 responses for inaccessible projects (no existence leak) and
+  aligns with the T4 access layer pattern.
+- label_studio/io_storages/tests/test_route_access.py: New test file with 25
+  tests covering all storage endpoints (list/detail/sync/resolve) and verifying
+  group-based access control.
+
+--------------------------------------------------------------------------------
+2. CHANGES
+--------------------------------------------------------------------------------
+The storage access control was already correctly implemented via delegation:
+- ProjectStorageMixin.has_permission (base_models.py:897) delegates to
+  project.has_permission(user)
+- Project.has_permission (mixins.py:85) uses accessible_projects(user) from T4
+- HasObjectPermission (api_permissions.py) calls obj.has_permission(user)
+- DRF's check_object_permissions is called automatically for detail views
+
+The only improvement made was consistency: the List APIs now use
+get_permitted_project() which raises 404 for inaccessible projects (instead of
+loading the project and then checking permissions, which could leak existence).
+
+All other endpoints (Detail, Sync, Resolve) already had proper object-level
+permission checks via DRF's automatic check_object_permissions or explicit
+instance.has_permission() calls.
+
+--------------------------------------------------------------------------------
+3. COMMANDS + REAL OUTPUTS
+--------------------------------------------------------------------------------
+=== 3a. required pytest command =============================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave2
+$ DJANGO_DB=sqlite uv run pytest label_studio/io_storages/tests \
+      label_studio/tests/test_presign_storage_data.py -vv
+
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave2
+collected 384 items
+
+[... 384 tests ...]
+
+======================= 384 passed in 175.00s (0:02:55) ========================
+
+Full output: /tmp/pytest_output.txt
+
+=== 3b. new test file (25 tests) ============================================
+$ DJANGO_DB=sqlite uv run pytest label_studio/io_storages/tests/test_route_access.py -vv
+
+collected 25 items
+
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageListAPIAccess::test_member_cannot_list_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageListAPIAccess::test_member_can_list_storage_from_granted_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageListAPIAccess::test_no_group_user_cannot_list_any_storage PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageListAPIAccess::test_admin_can_list_all_storages PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageListAPIAccess::test_member_cannot_list_export_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageListAPIAccess::test_admin_can_list_all_export_storages PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageDetailAPIAccess::test_member_cannot_retrieve_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageDetailAPIAccess::test_member_cannot_update_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageDetailAPIAccess::test_member_cannot_delete_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageDetailAPIAccess::test_member_can_retrieve_storage_from_granted_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageDetailAPIAccess::test_admin_can_retrieve_any_storage PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageDetailAPIAccess::test_member_cannot_retrieve_export_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageDetailAPIAccess::test_admin_can_retrieve_any_export_storage PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageSyncAPIAccess::test_member_cannot_sync_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageSyncAPIAccess::test_member_can_sync_storage_from_granted_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestImportStorageSyncAPIAccess::test_admin_can_sync_any_storage PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageSyncAPIAccess::test_member_cannot_sync_export_storage_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestExportStorageSyncAPIAccess::test_admin_can_sync_any_export_storage PASSED
+label_studio/io_storages/tests/test_route_access.py::TestTaskResolveStorageUriAccess::test_member_cannot_resolve_uri_from_task_in_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestTaskResolveStorageUriAccess::test_member_can_resolve_uri_from_task_in_granted_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestTaskResolveStorageUriAccess::test_admin_can_resolve_uri_from_any_task PASSED
+label_studio/io_storages/tests/test_route_access.py::TestProjectResolveStorageUriAccess::test_member_cannot_resolve_uri_from_other_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestProjectResolveStorageUriAccess::test_member_can_resolve_uri_from_granted_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestProjectResolveStorageUriAccess::test_admin_can_resolve_uri_from_any_project PASSED
+label_studio/io_storages/tests/test_route_access.py::TestCrossOrgAccess::test_member_cannot_access_storage_from_other_org PASSED
+
+============================= 25 passed in 40.04s ==============================
+
+=== 3c. manual QA (real HTTP surface, port 50080) ===========================
+Dedicated throwaway sqlite DB (dev DB untouched):
+  DATABASE_NAME=/tmp/opencode/t6-qa.sqlite3
+
+$ DATABASE_NAME=/tmp/opencode/t6-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py migrate
+  [... migrations ...]
+
+$ DATABASE_NAME=/tmp/opencode/t6-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "<seed org/owner/admin/member1/member2 + projects + storage + tokens>"
+Organization: 1
+Owner: 1 (owner@test.com)
+Admin: 2 (admin@test.com)
+Member1 (group A): 3 (member1@test.com)
+Member2 (no group): 4 (member2@test.com)
+Project A: 1
+Project B: 2
+Storage B: 1
+
+Tokens:
+owner@test.com: 4d5a3960ba26f5bc009086507b036a08c318124b
+admin@test.com: 6ac4d1c51b0d592ad38af0bc10920c189cadd8a7
+member1@test.com: 6c86d45845f6b1ec89df1c36f7325357885578e2
+member2@test.com: 63d14a2117e1197bdce2aa9570a15ffbaad6b25e
+
+# enable legacy API tokens for the org
+$ DATABASE_NAME=/tmp/opencode/t6-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "enable JWTSettings.legacy_api_tokens_enabled"
+Enabled legacy tokens for org 1
+
+$ DATABASE_NAME=/tmp/opencode/t6-qa.sqlite3 DJANGO_DB=sqlite \
+    nohup uv run python label_studio/manage.py runserver 50080 --noreload \
+    > /tmp/opencode/server.log 2>&1 &
+Server PID: 1664584
+
+--- member1 (group A) listing storages for project B (should be denied) -------
+$ curl -s -w "\nHTTP_CODE: %{http_code}\n" \
+    -H "Authorization: Token 6c86d45845f6b1ec89df1c36f7325357885578e2" \
+    "http://localhost:50080/api/storages/localfiles/?project=2"
+{"id":"4f0bb409-a041-45e2-85b7-04be35952661","status_code":404,"version":"1.24.0.dev0","detail":"No Project matches the given query.","exc_info":null}
+HTTP_CODE: 404
+
+Result: DENIED (404 - project not found, no existence leak)
+
+--- admin listing storages for project B (should succeed) ---------------------
+$ curl -s -w "\nHTTP_CODE: %{http_code}\n" \
+    -H "Authorization: Token 6ac4d1c51b0d592ad38af0bc10920c189cadd8a7" \
+    "http://localhost:50080/api/storages/localfiles/?project=2"
+[{"id":1,"type":"localfiles","synchronizable":true,"path":"/tmp/test/project_b","regex_filter":null,"use_blob_urls":false,"last_sync":null,"last_sync_count":null,"last_sync_job":null,"status":"initialized","traceback":null,"meta":{},"title":"Storage B","description":null,"created_at":"2026-11-16T19:26:21.701261-03:00","recursive_scan":false,"project":2}]
+HTTP_CODE: 200
+
+Result: ALLOWED (200 - storage data returned)
+
+--- member2 (no group) listing storages for project A (should be denied) ------
+$ curl -s -w "\nHTTP_CODE: %{http_code}\n" \
+    -H "Authorization: Token 63d14a2117e1197bdce2aa9570a15ffbaad6b25e" \
+    "http://localhost:50080/api/storages/localfiles/?project=1"
+{"id":"61cf22de-cd69-47c2-982b-33cff49ab171","status_code":404,"version":"1.24.0.dev0","detail":"No Project matches the given query.","exc_info":null}
+HTTP_CODE: 404
+
+Result: DENIED (404 - project not found, no existence leak)
+
+--- teardown ------------------------------------------------------------------
+$ kill $(cat /tmp/opencode/server.pid)
+$ ps -eo pid,ppid,cmd | grep -E "[m]anage.py runserver" || echo 'no runserver process'
+no runserver process
+$ rm -f /tmp/opencode/t6-qa.sqlite3
+
+--------------------------------------------------------------------------------
+4. ADVERSARIAL CHECKS
+--------------------------------------------------------------------------------
+=== misleading_success_output =================================================
+All 384 pytest tests pass (not just the new 25). The manual QA shows real HTTP
+404/200 responses (not mocked). The server was killed and scratch DB deleted.
+
+=== stale_state ===============================================================
+The worktree is on branch ulw/user-groups-dataset-access-wave2 with Wave 1 +
+uncommitted T4 changes. T6 builds on T4's access layer (accessible_projects,
+get_permitted_project, Project.has_permission). No stale state issues.
+
+=== dirty_worktree ============================================================
+Only T6 files were modified:
+- label_studio/io_storages/api.py (2 methods changed)
+- label_studio/io_storages/tests/test_route_access.py (new file)
+
+No files outside SCOPE were touched (projects/, tasks/, data_manager/,
+data_import/, data_export/ were NOT edited).
+
+=== security ==================================================================
+- Cross-project access: DENIED (404 for member1 accessing project B storage)
+- Cross-org access: DENIED (tested in TestCrossOrgAccess)
+- No-group user: DENIED (404 for member2 accessing any project)
+- No credential leak: Storage data only returned to authorized users (admin)
+- Presign/credential flow: NOT changed (as required)
+- Object-level permissions: Enforced via HasObjectPermission + has_permission
+
+=== performance ===============================================================
+- List APIs: Use get_permitted_project() which filters by accessible_projects()
+  in one query (no N+1)
+- Detail/Sync APIs: Rely on DRF's automatic check_object_permissions (one
+  additional query per request, acceptable for detail views)
+- No new database queries introduced
+
+=== other adversarial classes =================================================
+- race_condition: N/A (no concurrent operations tested)
+- resource_leak: N/A (server killed, DB deleted)
+- integration: N/A (no external services)
+- regression: All existing tests pass (384/384)
+
+--------------------------------------------------------------------------------
+5. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+✓ pytest label_studio/io_storages/tests label_studio/tests/test_presign_storage_data.py -vv
+  passes (384 tests)
+✓ Test: user without group access cannot list storage from other project (404)
+✓ Test: resolve of URI from other project is denied (403/404)
+✓ Manual QA: real HTTP shows denial (404) and allowance (200)
+✓ Evidence file exists: .omo/evidence/task-6-user-groups-dataset-access.txt
+✓ Server killed, scratch DB deleted
+
+--------------------------------------------------------------------------------
+6. DONE CLAIM
+--------------------------------------------------------------------------------
+{
+  "changed_files": [
+    "label_studio/io_storages/api.py",
+    "label_studio/io_storages/tests/test_route_access.py"
+  ],
+  "tests": {
+    "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave2 && DJANGO_DB=sqlite uv run pytest label_studio/io_storages/tests label_studio/tests/test_presign_storage_data.py -vv",
+    "result": "384 passed in 175.00s (0:02:55)"
+  },
+  "manual_qa": {
+    "artifact_path": "/root/workspace/projetos/label-studio/.omo/evidence/task-6-user-groups-dataset-access.txt",
+    "summary": "member1 (group A) denied access to project B storage (404); admin allowed (200); member2 (no group) denied access to project A (404)"
+  },
+  "cleanup": {
+    "server_killed": true,
+    "scratch_db_deleted": true,
+    "no_servers_running": true
+  },
+  "risks": [
+    "Low: Changed List APIs to use get_permitted_project() instead of Project.objects.get() + check_object_permissions. This provides consistent 404 responses (no existence leak) but changes the error code from 403 to 404 for inaccessible projects. Tests confirm this is the intended behavior.",
+    "Low: Sync APIs still use .objects.all() but rely on object-level permission checks. This is secure but could be optimized with queryset filtering in the future (not required for T6)."
+  ]
+}

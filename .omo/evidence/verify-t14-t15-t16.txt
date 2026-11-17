@@ -1,0 +1,213 @@
+# Adversarial Verification Report: T14, T15, T16
+**Verifier:** Independent adversarial verifier (fresh context)  
+**Worktree:** `/root/workspace/projetos/label-studio-wt/ugda-wave5`  
+**Base commit:** `ab1db2151` (merge: wave 4 - area admin frontend)  
+**Date:** 2026-11-17  
+**Constraint:** No product file edits; no commits; no real dev DB; all servers/scratch DBs/temp worktrees cleaned.
+
+---
+
+## T14: Integration test + docs + build/lint
+
+```json
+{
+  "task": "T14",
+  "claim": "Integration test (11 passed) + docs page exists and is factual + web build succeeds",
+  "verdict": "CONFIRMED",
+  "failure_class": null,
+  "evidence": {
+    "integration_test": {
+      "command": "DJANGO_DB=sqlite uv run pytest label_studio/tests/test_admin_groups_integration.py -vv",
+      "result": "11 passed in 29.50s",
+      "test_classes": [
+        "TestAdminGrantFlow (4 tests): member_sees_exactly_the_granted_project, member_dm_task_list_shows_granted_project_tasks, revoke_project_grant_removes_member_access, remove_member_removes_access",
+        "TestVisibilityMatrix (4 tests): member_without_group_sees_no_projects, owner_sees_all_projects, admin_sees_all_projects, admin_grant_does_not_leak_across_organizations",
+        "TestAdminApiGate (3 tests): plain_member_is_forbidden_on_group_admin_endpoints, plain_member_is_forbidden_on_user_admin_endpoints, anonymous_is_rejected_on_admin_endpoints"
+      ],
+      "coverage": "End-to-end HTTP: admin creates group → adds member → grants project → member sees exactly that project in /api/projects/ and /api/tasks/?project=... → revoke removes access → loner sees nothing → owner/admin see all → plain member gets 403 on all admin endpoints → anonymous rejected"
+    },
+    "docs_page": {
+      "path": "docs/source/guide/admin.md",
+      "exists": true,
+      "line_count": 75,
+      "factual_check": "PASS - No marketing language. Documents: admin definition (owner/is_admin/superuser), Users page capabilities, Groups page capabilities, restrictive visibility semantics (non-admin sees union of grants, no-group sees nothing, owner/admin see all, soft-deleted membership sees nothing), default group on upgrade (All members), admin API endpoint table, cross-org rejection. All claims match test coverage.",
+      "sections": ["Admin area intro", "Users", "Groups and dataset access", "Restrictive semantics", "Default group on upgrade", "Admin API"]
+    },
+    "web_build": {
+      "command": "cd web && bun run build",
+      "result": "EXIT=0, built in 25.39s",
+      "output_files": ["dist/apps/labelstudio/main-ClTRWdVp.js (2.2MB)", "dist/apps/labelstudio/src-CLYM5Yir.js (2.0MB)", "dist/apps/labelstudio/vendor-DR5V3BaZ.js (1.7MB)", "dist/apps/labelstudio/style-C9CsA835.css (1.8MB)"],
+      "warnings": "Chunk size warning (expected for large SPA), no errors"
+    },
+    "worktree_status": "Clean (only generated static files from build: sw.js, manifest.json, sw.js.map)"
+  },
+  "repro": "Run the three commands above in sequence. Integration test uses pytest-django with sqlite in-memory. Docs page is plain Markdown with YAML frontmatter. Web build uses Vite via bun.",
+  "confidence": 1.0,
+  "adversarial_checks": {
+    "misleading_success_output": "PASS - Test names match actual behavior (e.g., test_member_sees_exactly_the_granted_project asserts visible_project_ids(member_client) == {project_a.id}, not just status 200)",
+    "stale_state": "PASS - Worktree is on correct commit, all tests run against current code",
+    "dirty_worktree": "PASS - Only generated files from build, no product edits",
+    "security": "PASS - Integration test verifies 403 on admin endpoints for plain members and anonymous, cross-org isolation",
+    "performance": "N/A - No performance claims"
+  }
+}
+```
+
+---
+
+## T15: Duplicate group name → 400
+
+```json
+{
+  "task": "T15",
+  "claim": "Duplicate group name in same organization returns 400 (not 500)",
+  "verdict": "CONFIRMED",
+  "failure_class": null,
+  "evidence": {
+    "serializer_fix": {
+      "file": "label_studio/groups/serializers.py",
+      "diff_hunk": "+    def validate(self, attrs):\n+        # organization is read-only (set in perform_create), so UniqueTogetherValidator\n+        # cannot see it and would reject every create as \"This field is required.\" --\n+        # resolve it from the request context and enforce unique_together here.\n+        name = attrs.get('name')\n+        if not name:\n+            return attrs\n+\n+        organization = attrs.get('organization')\n+        if organization is None:\n+            request = self.context.get('request')\n+            organization = getattr(getattr(request, 'user', None), 'active_organization', None)\n+        if organization is None:\n+            return attrs\n+\n+        conflicts = UserGroup.objects.filter(organization=organization, name=name)\n+        if self.instance is not None:\n+            conflicts = conflicts.exclude(pk=self.instance.pk)\n+        if conflicts.exists():\n+            raise serializers.ValidationError(\n+                {'name': 'A group with this name already exists in the organization.'}\n+            )\n+        return attrs",
+      "rationale": "UniqueTogetherValidator requires organization in attrs, but organization is read-only (set in perform_create). Manual validation resolves organization from request.user.active_organization and checks for conflicts, excluding self on update."
+    },
+    "unit_test": {
+      "file": "label_studio/groups/tests/test_api.py",
+      "test_added": "test_duplicate_name_in_same_organization_returns_400",
+      "assertions": [
+        "response.status_code == 400",
+        "'A group with this name already exists in the organization.' in response.content.decode()",
+        "UserGroup.objects.filter(organization=organization, name='Data squad').count() == 1"
+      ],
+      "test_added_2": "test_same_name_in_other_organization_is_allowed",
+      "assertions_2": [
+        "response.status_code == 201",
+        "UserGroup.objects.filter(organization=organization, name='Data squad').count() == 1"
+      ]
+    },
+    "test_suite_result": {
+      "command": "DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv",
+      "result": "32 passed in 57.80s",
+      "includes": ["test_duplicate_name_in_same_organization_returns_400 PASSED", "test_same_name_in_other_organization_is_allowed PASSED"]
+    },
+    "live_reproduction": {
+      "method": "Django test client (APIClient.force_authenticate) with DiscoverRunner setup_databases()",
+      "script": "Create admin user → create org → POST /api/admin/groups/ {'name': 'Data squad'} → expect 201 → POST same payload → expect 400",
+      "first_create": {"status": 201, "body": "Group created with UUID"},
+      "duplicate_create": {
+        "status": 400,
+        "body": "{\"id\":\"...\",\"status_code\":400,\"version\":\"1.24.0.dev0\",\"detail\":\"Validation error\",\"exc_info\":null,\"validation_errors\":{\"name\":[\"A group with this name already exists in the organization.\"]}}",
+        "not_500": true
+      },
+      "verdict": "CONFIRMED: 201 then 400 (not 500)"
+    }
+  },
+  "repro": "1. Run pytest label_studio/groups/tests -vv (32 passed). 2. Use Django test client: create group twice, assert second returns 400 with validation_errors.name. Live server test skipped (token auth disabled, session auth requires CSRF; test client is authoritative).",
+  "confidence": 1.0,
+  "adversarial_checks": {
+    "misleading_success_output": "PASS - Test asserts status_code == 400 AND error message AND DB count == 1 (no duplicate created)",
+    "stale_state": "PASS - Serializer fix is in current code, tests run against it",
+    "dirty_worktree": "PASS - Only test files and serializer modified",
+    "security": "PASS - Cross-org same-name allowed (correct: uniqueness is per-org), no information leakage",
+    "performance": "PASS - Single DB query (conflicts.exists()) per create, acceptable"
+  }
+}
+```
+
+---
+
+## T16: Fix 5 hotkeys test failures + format Admin files
+
+```json
+{
+  "task": "T16",
+  "claim": "5 previously failing hotkeys tests now pass via group grant (no assertion deleted/weakened) + Admin files formatted (biome exit 0, bun test green)",
+  "verdict": "CONFIRMED",
+  "failure_class": null,
+  "evidence": {
+    "base_commit_failures": {
+      "commit": "ab1db2151",
+      "command": "DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_hotkeys_api.py -vv",
+      "result": "5 failed, 17 passed, 10 subtests passed",
+      "failures": [
+        "test_empty_project_hotkeys_deletes_preference: assert 403 == 200",
+        "test_get_project_hotkeys_without_preference: assert 403 == 200",
+        "test_patch_project_hotkeys_creates_preference_not_membership: assert 403 == 200",
+        "test_project_hotkeys_are_isolated_by_project: assert 403 == 200",
+        "test_project_hotkeys_are_isolated_by_user: assert 403 == 200"
+      ],
+      "root_cause": "Project.has_permission denies non-admin members of the same organization without a group grant (restrictive access layer from wave 2)"
+    },
+    "fix_applied": {
+      "file": "label_studio/users/tests/test_hotkeys_api.py",
+      "helper_added": "_grant_project_access(user, project) - creates UserGroup, adds UserGroupMember, creates UserGroupProject",
+      "setUp_change": "self._grant_project_access(self.user, self.project) added to ProjectHotkeysAPITestCase.setUp",
+      "new_test_added": "test_member_without_group_grant_gets_forbidden - verifies ungranted same-org member gets 403 on GET and PATCH",
+      "assertion_integrity": "NO assertions deleted or weakened. All original assertions preserved. Fix grants access to the test user so they can exercise the endpoint, matching the pattern in data_manager/tests/test_api.py."
+    },
+    "diff_hunk_quote": "@staticmethod\ndef _grant_project_access(user, project):\n    \"\"\"Grant ``user`` access to ``project`` through a group (restrictive access layer).\n\n    Mirrors the pattern in ``data_manager/tests/test_api.py``: without a group grant,\n    ``Project.has_permission`` denies non-admin members of the same organization.\n    \"\"\"\n    group = UserGroup.objects.create(\n        organization=project.organization,\n        name=f'HotkeysGroup-{user.id}-{project.id}',\n        created_by=project.organization.created_by,\n    )\n    UserGroupMember.objects.create(group=group, user=user)\n    UserGroupProject.objects.create(group=group, project=project)\n\ndef setUp(self):\n    self.client = APIClient()\n    self.project = ProjectFactory()\n    self.user = UserFactory(active_organization=self.project.organization)\n    self._grant_project_access(self.user, self.project)  # <-- ADDED\n    self.client.force_authenticate(user=self.user)",
+    "current_test_result": {
+      "command": "DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_hotkeys_api.py -vv",
+      "result": "23 passed, 10 subtests passed in 42.34s",
+      "includes": [
+        "test_empty_project_hotkeys_deletes_preference PASSED",
+        "test_get_project_hotkeys_without_preference PASSED",
+        "test_patch_project_hotkeys_creates_preference_not_membership PASSED",
+        "test_project_hotkeys_are_isolated_by_project PASSED",
+        "test_project_hotkeys_are_isolated_by_user PASSED",
+        "test_member_without_group_grant_gets_forbidden PASSED (NEW)"
+      ],
+      "failures_gone": true
+    },
+    "frontend_formatting": {
+      "biome_check": {
+        "command": "cd web && bunx biome check apps/labelstudio/src/pages/Admin",
+        "result": "EXIT=0, Found 1 warning (ds/raw-control on line 426, pre-existing, not an error)",
+        "files_checked": 7,
+        "fixes_applied": 0
+      },
+      "bun_test": {
+        "command": "cd web && bun test --dom apps/labelstudio/src/pages/Admin",
+        "result": "47 pass, 0 fail, 161 expect() calls, Ran 47 tests across 3 files in 5.21s",
+        "files": ["GroupsPage.test.jsx", "UsersPage.test.jsx", "AdminPage.test.jsx"]
+      },
+      "formatting_changes": [
+        "GroupsPage.jsx: loadGroups useCallback reformatted (indentation, line breaks)",
+        "GroupsPage.jsx: mutate calls reformatted for readability",
+        "GroupsPage.jsx: Menu.Item and ul attributes reformatted",
+        "GroupsPage.test.jsx: makeApi responses reformatted (multi-line objects)",
+        "GroupsPage.test.jsx: expect() calls reformatted for line length",
+        "index.js: trailing blank line removed"
+      ],
+      "semantic_changes": "NONE - only formatting"
+    },
+    "full_acceptance": {
+      "command": "DJANGO_DB=sqlite uv run pytest label_studio/tests/test_admin_groups_integration.py label_studio/groups/tests label_studio/users/tests label_studio/projects/tests -vv",
+      "result": "349 passed, 36 subtests passed in 215.29s",
+      "failures": 0,
+      "pre_existing_failures": "NONE - all 349 tests pass"
+    }
+  },
+  "repro": "1. Checkout base ab1db2151, run hotkeys test → 5 failures (403 != 200). 2. Apply T16 changes (group grant in setUp, new 403 test). 3. Run hotkeys test → 23 passed. 4. Run biome check → exit 0. 5. Run bun test → 47 pass. 6. Run full acceptance → 349 passed.",
+  "confidence": 1.0,
+  "adversarial_checks": {
+    "misleading_success_output": "PASS - All 5 previously failing tests now pass. New test (test_member_without_group_grant_gets_forbidden) verifies the negative case (no group → 403). No assertions deleted.",
+    "stale_state": "PASS - Base commit tested in throwaway worktree, current worktree has T16 changes",
+    "dirty_worktree": "PASS - Only test files and Admin frontend files modified",
+    "security": "PASS - New test verifies ungranted members are denied (403), confirming enforcement still works",
+    "performance": "N/A - Test-only change"
+  }
+}
+```
+
+---
+
+## Summary
+
+| Task | Verdict | Confidence | Key Evidence |
+|------|---------|------------|--------------|
+| T14 | **CONFIRMED** | 1.0 | 11 integration tests passed, docs page factual, web build exit 0 |
+| T15 | **CONFIRMED** | 1.0 | Duplicate name → 400 (not 500), serializer fix + 2 unit tests + live repro |
+| T16 | **CONFIRMED** | 1.0 | 5 failures → 0 failures, 23 passed, biome exit 0, 47 bun tests passed, 349 full acceptance |
+
+**Adversarial conclusion:** All three claims are **TRUE**. No misleading success, no stale state, no dirty worktree, no security regressions. The fixes are minimal, correct, and well-tested.
+
+**Cleanup verified:** Server killed, scratch DB deleted, temp worktree removed.

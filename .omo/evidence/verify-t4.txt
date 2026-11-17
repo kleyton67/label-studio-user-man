@@ -1,0 +1,241 @@
+# Adversarial Verification: T4 - Group-Based Access Control
+
+## Verdict
+**confirmed**
+
+## Failure Class
+**none**
+
+## Evidence
+
+### 1. Worktree Status
+```
+$ git -C /root/workspace/projetos/label-studio-wt/ugda-wave2 status --porcelain
+ M label_studio/data_manager/tests/test_api.py
+ M label_studio/projects/api.py
+ M label_studio/projects/functions/access.py
+ M label_studio/projects/mixins.py
+ M label_studio/projects/models.py
+ M label_studio/projects/tests/test_models.py
+?? label_studio/projects/tests/test_access.py
+```
+**Result**: Clean. Only expected T4 changes present.
+
+### 2. Restrictive Logic Verification
+
+**Code Review** (from diffs):
+
+- `accessible_projects(user)` in `projects/functions/access.py`:
+  - Returns `Project.objects.none()` if `organization is None` or membership revoked
+  - Returns all org projects if admin (superuser OR `is_admin` flag OR org owner)
+  - Otherwise returns projects linked to user's groups via `UserGroupMember` → `UserGroupProject`
+  - ✓ Correct
+
+- `ProjectManager.for_user` in `projects/models.py`:
+  - Delegates to `accessible_projects(user).values('pk')`
+  - ✓ Correct
+
+- `ProjectMixin.has_permission` in `projects/mixins.py`:
+  - Returns `True` if `organization_id is None` (legacy rows)
+  - Otherwise checks `accessible_projects(user).filter(pk=self.pk).exists()`
+  - ✓ Correct, preserves `organization is None` case
+
+- `ProjectListAPI.get_queryset` in `projects/api.py`:
+  - Uses `accessible_projects(self.request.user)` instead of org-wide filter
+  - ✓ Correct
+
+### 3. Pre-Existing Failures (BASE vs T4)
+
+**BASE (a733aeeeb without T4)**:
+```
+$ cd /tmp/opencode/ugda-base/label_studio && uv run pytest data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData -vv
+============================= test session starts ==============================
+...
+FAILED data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData::test_greater
+FAILED data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData::test_in_range
+FAILED data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData::test_key_with_non_ascii_and_slash
+FAILED data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData::test_less
+FAILED data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData::test_not_in_range_skips_values_that_are_not_dates
+======== 5 failed in 23.90s ========
+```
+
+**T4 worktree**:
+```
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave2/label_studio && uv run pytest projects/tests data_manager/tests -vv
+...
+======== 5 failed, 374 passed, 217 subtests passed in 107.78s (0:01:47) ========
+```
+
+**Result**: ✓ Confirmed. The 5 `TestApplyFiltersDatetimeOnTaskData` failures exist on BASE without T4. They are pre-existing and NOT caused by T4.
+
+### 4. Edited Test Scrutiny
+
+**`projects/tests/test_models.py::TestProjectHasPermission`**:
+
+**Diff**:
+```diff
+-    """LSO has one organization, so has_permission only has to reject revoked membership."""
++    """T4: has_permission is restrictive - non-admin without group access sees nothing."""
+
+-    def test_member_is_allowed(self):
++    def test_member_without_group_is_rejected(self):
++        """Plain member without group membership cannot access projects (restrictive)."""
+         project = ProjectFactory()
+         user = UserFactory(active_organization=project.organization)
+
+-        assert project.has_permission(user) is True
++        assert project.has_permission(user) is False
+```
+
+**Plan Row** (T4):
+> "não retornar todos para membro sem grupo (restritivo)" - do NOT return all for member without group (restrictive)
+
+**Analysis**: The test was renamed and the assertion flipped from `True` to `False`. This is a **JUSTIFIED semantic change** per the plan. The plan explicitly requires restrictive access: non-admin users without group membership see nothing. The old test expected permissive behavior (all org members see all projects), which contradicts the T4 goal.
+
+**Result**: ✓ Justified. Not a regression hide.
+
+**`data_manager/tests/test_api.py`**:
+
+**Changes**: Added group grants to existing test fixtures:
+- `TestProjectUsersOptionsAPI.setUpClass`: Created group, added `first_member` and `second_member`, granted project
+- `TestProjectUsersOptionsAPI.test_selected_value_is_first_with_pagination`: Added group members for `extra_members`
+- `TestProjectUsersColumnOptionsAPI.setUpClass`: Created group, added `annotator`, `updated_by`, `annotation_updated_by`, `non_participant`, granted project
+
+**Analysis**: These are **JUSTIFIED setup changes**, not test weakening. The tests still verify the same behavior (pagination, column options, etc.), but now the fixtures include group grants so users can access the project under the new restrictive model. Without these grants, the tests would fail because users couldn't see the project at all.
+
+**Result**: ✓ Justified. Tests maintain their original verification intent.
+
+### 5. T4 Test Suite Results
+
+```
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave2/label_studio && uv run pytest projects/tests/test_access.py -vv
+...
+projects/tests/test_access.py::TestAccessibleProjects::test_group_member_sees_granted_project_only PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_two_groups_union PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_non_admin_no_group_sees_nothing PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_org_owner_sees_all_projects PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_is_admin_flag_sees_all_projects PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_soft_deleted_membership_sees_nothing PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_no_active_organization_sees_nothing PASSED
+projects/tests/test_access.py::TestAccessibleProjects::test_cross_org_project_not_included PASSED
+projects/tests/test_access.py::TestHelpers::test_is_admin_user_superuser PASSED
+projects/tests/test_access.py::TestHelpers::test_is_admin_user_flag PASSED
+projects/tests/test_access.py::TestHelpers::test_is_admin_user_org_owner PASSED
+projects/tests/test_access.py::TestHelpers::test_is_admin_user_plain_member PASSED
+projects/tests/test_access.py::TestHelpers::test_user_group_project_ids_returns_granted_ids PASSED
+projects/tests/test_access.py::TestProjectHasPermission::test_granted_project_returns_true PASSED
+projects/tests/test_access.py::TestProjectHasPermission::test_non_granted_project_returns_false PASSED
+projects/tests/test_access.py::TestProjectHasPermission::test_project_without_organization_returns_true PASSED
+projects/tests/test_access.py::TestProjectListAPIAccess::test_group_member_sees_only_granted_project PASSED
+projects/tests/test_access.py::TestProjectListAPIAccess::test_no_group_user_sees_empty_list PASSED
+projects/tests/test_access.py::TestProjectListAPIAccess::test_admin_sees_all_projects PASSED
+projects/tests/test_access.py::TestProjectManagerForUser::test_for_user_scopes_by_group_access PASSED
+projects/tests/test_access.py::TestProjectManagerForUser::test_for_user_empty_for_no_group PASSED
+
+============================= 21 passed in 36.91s ==============================
+```
+
+**Result**: ✓ All 21 T4 tests pass.
+
+### 6. HTTP QA (Real Server)
+
+**Setup**:
+- Scratch DB: `/tmp/opencode/verify-t4.sqlite3`
+- Migrated, seeded: org + owner + admin(is_admin=True) + member1(group granted project A) + member2(no group) + projects A,B
+- Enabled legacy API tokens
+- Server: `python manage.py runserver 50080 --noreload`
+
+**Results**:
+
+| Test | User | Expected | Actual | Status |
+|------|------|----------|--------|--------|
+| 1 | member1 (in group) | See only Project A | `{"id": 1, "title": "Project A"}` | ✓ |
+| 2 | member2 (no group) | See nothing | `[]` | ✓ |
+| 3 | admin (is_admin=True) | See all projects | Project A + Project B | ✓ |
+| 4 | owner | See all projects | Project A + Project B | ✓ |
+| 5 | member1 → Project B | 403/404 | `403` | ✓ |
+| 6 | member2 → Project A | 403/404 | `403` | ✓ |
+
+**Cleanup**: Server killed, scratch DB deleted, temp files removed.
+
+**Result**: ✓ All HTTP scenarios pass.
+
+### 7. Adversarial Probes
+
+**stale_state**: N/A (no stale state detected)
+
+**misleading_success_output**: 
+- Real pytest tail captured: `======== 5 failed, 374 passed, 217 subtests passed in 107.78s (0:01:47) ========`
+- 5 failures are pre-existing (verified on BASE)
+- ✓ Not misleading
+
+**dirty_worktree**:
+- `git status --porcelain` shows only expected T4 changes
+- ✓ Clean
+
+**security**:
+- Cross-org: `test_cross_org_project_not_included` passes ✓
+- Non-granted: member2 sees nothing, gets 403 on Project A ✓
+- No-group: member2 sees empty list ✓
+- Revoked: `test_soft_deleted_membership_sees_nothing` passes ✓
+- ✓ All security scenarios pass
+
+**performance**:
+- Query pattern: `accessible_projects` uses a single query with `id__in` subquery
+- `user_group_project_ids` returns `values_list(...).distinct()` - efficient
+- No N+1 explosion detected in test suite (374 tests pass in 107s)
+- ✓ Acceptable
+
+## Reproduction
+
+To reproduce the verification:
+
+```bash
+# 1. Check worktree status
+git -C /root/workspace/projetos/label-studio-wt/ugda-wave2 status --porcelain
+
+# 2. Run T4 tests
+cd /root/workspace/projetos/label-studio-wt/ugda-wave2/label_studio
+uv run --frozen --group test pytest projects/tests/test_access.py -vv
+
+# 3. Run full suite (projects + data_manager)
+uv run --frozen --group test pytest projects/tests data_manager/tests -vv
+
+# 4. Verify pre-existing failures on BASE
+git -C /root/workspace/projetos/label-studio worktree add /tmp/opencode/ugda-base a733aeeeb
+cd /tmp/opencode/ugda-base/label_studio
+uv sync --frozen --group test
+uv run pytest data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData -vv
+cd /root/workspace/projetos/label-studio
+git worktree remove --force /tmp/opencode/ugda-base
+```
+
+## Confidence
+
+**0.95**
+
+High confidence because:
+- All T4 tests pass (21/21)
+- Pre-existing failures confirmed on BASE (5/5)
+- HTTP QA passes all scenarios (6/6)
+- Edited tests are justified semantic changes per plan
+- Security probes pass
+- No N+1 issues detected
+
+Minor uncertainty:
+- Did not measure exact query count with `CaptureQueriesContext` (test infrastructure issue, not product issue)
+- Did not test with thousands of projects/groups (scale test)
+
+## Conclusion
+
+T4 is **correctly implemented**. The restrictive access control works as specified:
+- Non-admin users without group membership see nothing
+- Admin users (superuser/is_admin/owner) see all org projects
+- Group members see only projects granted to their groups
+- Cross-org access is blocked
+- Soft-deleted membership is rejected
+- `organization is None` case is preserved
+
+The 5 test failures in `TestApplyFiltersDatetimeOnTaskData` are **pre-existing** and unrelated to T4.
+
+The edited tests in `test_models.py` and `test_api.py` are **justified** by the plan's semantic change from permissive to restrictive access.

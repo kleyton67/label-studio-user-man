@@ -1,0 +1,61 @@
+{
+  "task": "verify-t10",
+  "verdict": "CONFIRMED",
+  "failure_class": null,
+  "confidence": 0.92,
+  "evidence": {
+    "1_git_status": {
+      "result": "PASS",
+      "initial_status": " M web/apps/labelstudio/src/config/ApiConfig.js\n?? web/apps/labelstudio/src/config/ApiConfig.test.ts\n?? web/apps/labelstudio/src/types/admin.ts",
+      "note": "Exactly the 3 claimed files, nothing else. (My own `bun run build` later produced label_studio/core/static/js/{sw.js,manifest.json,sw.js.map} artifacts; I restored them via git checkout + rm, final status again shows only the 3 claimed files. Not a T10 defect.)"
+    },
+    "2_eighteen_keys_vs_plan": {
+      "result": "PASS_WITH_CAVEAT",
+      "plan_row": ".omo/plans/user-groups-dataset-access.md:211-212 (- [ ] 10.)",
+      "plan_lists": "17 key-value pairs (no updateAdminUserGroups)",
+      "api_config_lists": 18,
+      "all_17_plan_pairs_match_exactly": true,
+      "extra_key": "updateAdminUserGroups: \"PUT:/admin/users/:pk/groups\" (ApiConfig.js:26) — absent from plan row text, but backend label_studio/users/api.py:590 AdminUserGroupsAPI implements def put(...), so the key is correct, just not enumerated in the plan row.",
+      "grep_lines": "ApiConfig.js:20-37 (all 18 keys present at claimed values)"
+    },
+    "3_unit_tests": {
+      "result": "PASS",
+      "command": "cd web && bun run ls:unit src/config",
+      "raw_summary": "bun test --dom apps/labelstudio/src src/config\nbun test v1.3.14 (0d9b296a)\n\n 41 pass\n 0 fail\n 53 expect() calls\nRan 41 tests across 4 files. [1.72s]\nEXIT=0"
+    },
+    "4_build": {
+      "result": "PASS",
+      "command": "cd web && bun run build",
+      "raw_summary": "dist/apps/labelstudio/main-DbuT2wz8.js ... (vite output)\n✓ built in 25.94s\n[service-worker] precached 18 entries (~8850724 bytes manifest payload)\nEXIT=0",
+      "note": "Real exit 0; build does not run tsc (vite only)."
+    },
+    "5_negative_typecheck": {
+      "result": "PASS",
+      "method": "sed -i '/is_admin: boolean;/d' web/libs/core/src/types/user.ts; bunx tsc --noEmit -p tsconfig.json; then git checkout -- web/libs/core/src/types/user.ts",
+      "with_is_admin_removed": [
+        "apps/labelstudio/src/types/admin.ts(5,3): error TS2344: Type '\"id\" | \"email\" | ... | \"is_admin\"' does not satisfy the constraint 'keyof APIUser'.",
+        "apps/labelstudio/src/config/ApiConfig.test.ts(48,49): error TS2344: Type '\"is_admin\"' does not satisfy the constraint 'keyof APIUser'."
+      ],
+      "restored": "git status shows user.ts unmodified; grep confirms is_admin: boolean; back at user.ts:20",
+      "baseline_caveat": "Full tsc is NOT green at baseline either way (pre-existing TS2686/TS2322 errors in HeidiTip.tsx, Modal.tsx, Pagination.tsx etc., plus 5 pre-existing jest-matcher errors IN ApiConfig.test.ts itself: TS2551 toEqual / TS2339 toHaveLength/toBe — bun's Assertion type lacks jest matchers under tsc). These 5 errors exist with AND without is_admin removed; the TS2344 pair is the discriminating signal and it appears only when is_admin is removed."
+    },
+    "6_adversarial": {
+      "misleading_success_output": "CLEAR — all outputs captured from real command runs with EXIT codes (tests EXIT=0, build EXIT=0, tsc error lines pasted verbatim).",
+      "stale_state": "CLEAR — HEAD is 0eb2839ec 'merge: wave 3' with T10 changes sitting uncommitted on top; backend AdminUserGroupsAPI PUT and is_admin in user.ts:20 are consistent with the frontend claim (not stale wave-3 leftovers presented as T10).",
+      "dirty_worktree": "CLEAR_AFTER_CLEANUP — worktree was clean of non-T10 changes before my build; build artifacts I created were reverted; final status = exactly the 3 claimed files."
+    }
+  },
+  "repro": [
+    "git -C /root/workspace/projetos/label-studio-wt/ugda-wave4 status --porcelain  # 3 files",
+    "grep -nE 'adminUsers|...|deleteAdminGroupProject' web/apps/labelstudio/src/config/ApiConfig.js  # lines 20-37",
+    "grep -n '\\- \\[ \\] 10\\.' /root/workspace/projetos/label-studio/.omo/plans/user-groups-dataset-access.md  # line 211, 17 pairs",
+    "cd web && bun run ls:unit src/config  # 41 pass / 0 fail",
+    "cd web && bun run build  # exit 0, built in 25.94s",
+    "sed -i '/is_admin: boolean;/d' web/libs/core/src/types/user.ts && bunx tsc --noEmit -p tsconfig.json | grep TS2344  # 2 hits; git checkout -- web/libs/core/src/types/user.ts"
+  ],
+  "caveats": [
+    "Plan row 10 enumerates 17 keys, not 18; the 18th (updateAdminUserGroups PUT) is extra vs plan text but matches backend AdminUserGroupsAPI.put.",
+    "ApiConfig.test.ts has 5 pre-existing tsc errors (jest matchers vs bun Assertion types) present at baseline; claim only asserted a negative TS2344 check, which holds, and bun test ignores them.",
+    "`bun run build` does not typecheck; the typecheck claim rests on the explicit bunx tsc runs above."
+  ]
+}

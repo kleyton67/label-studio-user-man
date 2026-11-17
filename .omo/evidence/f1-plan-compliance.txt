@@ -1,0 +1,131 @@
+F1 - Plan compliance audit
+==========================
+Plan: .omo/plans/user-groups-dataset-access.md
+Repo:  /root/workspace/projetos/label-studio-wt/ugda-final
+Branch: ulw/user-groups-dataset-access-final
+HEAD:   6ca3a86bcf1819ce331c96953937d3d52df70aa6
+Base:   85f7d3227 (confirmed ancestor of HEAD)
+Date:   2026-11-17
+Mode:   read-only audit (this evidence file is the only artifact written)
+
+VERDICT: APPROVE
+
+------------------------------------------------------------
+CHECK 1 - Implementation row structure
+------------------------------------------------------------
+Column-zero implementation rows `- [ ] N.` / `- [x] N.`: 16
+  T1..T16 all present, all status `- [x]`.
+Column-zero final rows `- [ ] F<n>.`: 4
+  F1..F4 all present, all status `- [ ]` (pending, this wave).
+Per-row required fields (verified per block, not just global counts):
+  References:                      16/16
+  Acceptance criteria:             16/16
+  QA scenarios:                    16/16
+  Commit:                          16/16
+  Recommended task executor category: 16/16
+No prose heading or bullet is used as a task: the only checkbox lines in the
+plan are the 16 implementation rows + 4 final rows (20 total). PASS.
+
+------------------------------------------------------------
+CHECK 2 - Checkbox states
+------------------------------------------------------------
+Implementation rows `- [x]`: 16/16 done.
+Final rows `- [ ] F1..F4`: 4/4 pending. PASS.
+
+------------------------------------------------------------
+CHECK 3 - Git history / status / scope
+------------------------------------------------------------
+git log --oneline (top):
+  6ca3a86bc merge: wave 5 - integracao, validador de unicidade e correcoes
+  098a788f0 style(admin): format admin pages
+  eae24a75e fix(users): grant group access in hotkey project tests
+  2d30106bf fix(groups): validate unique group name per organization
+  a3379e2ff test(admin): add end-to-end group access integration and docs
+  ab1db2151 merge: wave 4 - area admin frontend
+  ...
+  e0ce56a08 feat(groups): add user group models and project grants
+  85f7d3227 fix: FIT-3446: Allow-list the interface skill CLI ... (base)
+
+git status --porcelain: empty (0 entries; clean tree).
+
+git diff --stat 85f7d3227..HEAD:
+  62 files changed, 6049 insertions(+), 34 deletions(-)
+  No `.omo/` path appears in the diff.
+
+Scope comparison (plan has no literal "Scope IN" section; scope inferred from
+"Must have" + per-todo References + todo descriptions):
+  All 62 changed files fall inside the plan scope:
+    groups app (models/migrations/api/serializers/urls/tests) -> T1,T3,T7,T15
+    users (models/migration/serializers/api/admin/views/urls/tests) -> T2,T8,T9,T11,T16
+    projects (access/models/mixins/api/tests) -> T4,T5
+    tasks/api.py + tests -> T5
+    data_manager, data_export -> T5
+    io_storages/api.py + tests -> T6
+    core (permissions, api_permissions, settings, urls) -> T1,T2,T7
+    web Admin pages/config/types/Menubar/pages index -> T10,T11,T12,T13,T16
+    docs/source/guide/admin.md -> T14
+    label_studio/tests/test_admin_groups_integration.py -> T14
+  6 changed files are not named verbatim in the plan, but all are test files
+  within their todo's stated test scope (non-blocking):
+    label_studio/io_storages/tests/test_route_access.py   (T6: "pytest io_storages/tests")
+    label_studio/projects/tests/test_route_access.py      (T5: "pytest projects/tests")
+    label_studio/users/tests/test_admin_permissions.py    (T2 admin-permission tests)
+    web/.../config/ApiConfig.test.ts                      (T10 config/type tests)
+    web/.../pages/Admin/AdminPage.test.jsx                (T11 bun tests)
+    web/.../pages/Admin/UsersPage.test.jsx                (T12 bun tests)
+  No product/source file outside scope was changed. PASS.
+
+------------------------------------------------------------
+CHECK 4 - Must-NOT-Have guardrails
+------------------------------------------------------------
+1. No roles matrix / no permissions beyond dataset access:
+   groups/models.py defines only UserGroup, UserGroupMember, UserGroupProject;
+   no `role` field. core/permissions.py adds only users.manage + groups.view/
+   create/change/delete. PASS.
+2. No Django auth.Group as user group:
+   label_studio/groups does not import auth.Group. auth.Group appears only in
+   pre-existing users/admin.py (unregister) and a test import. PASS.
+3. No is_staff/is_superuser-only admin gate:
+   No is_staff in any gate file. core/api_permissions.py IsOrganizationAdmin ->
+   request.user.has_perm('users.manage'). core/permissions.py is_org_admin ->
+   is_superuser OR is_admin OR org owner (matches plan T2 spec). PASS.
+4. Django admin still present:
+   users/admin.py registers UserGroup/UserGroupMember/UserGroupProject and
+   unregisters Group; is_admin in list_display/list_filter/fieldsets. PASS.
+5. No new dataset entity:
+   "dataset" remains Project; no Dataset model. PASS.
+6. No io_storages credential changes:
+   diff for io_storages only replaces get_object_or_404(Project, ...) with
+   get_permitted_project(request.user, ...) in Import/ExportStorageListAPI;
+   no credential/presign changes. PASS.
+
+------------------------------------------------------------
+CHECK 5 - Todo / ledger / plan agreement
+------------------------------------------------------------
+.omo/ulw-execute/ledger.jsonl: 16 `task-completed` entries.
+  Tasks covered: T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14,T15,T16
+  Missing implementation rows: none (T1..T16 all present).
+  (T5 has a prior `verdict: needs-fix` then a confirmed `task-completed` at
+   attempt 2; the final state is confirmed.)
+  PASS.
+
+------------------------------------------------------------
+FINDINGS (non-blocking)
+------------------------------------------------------------
+- Plan TL;DR machine line says "14 todos + 4 verificações finais", but the
+  Todos section carries 16 implementation rows (T15/T16 are follow-ups appended
+  after verification waves). Prose/count drift only; no task-compliance impact.
+- Plan has no explicit "Scope IN" list; scope was derived from Must have +
+  References + todos (see Check 3).
+- 6 changed test files are not named verbatim in the plan but lie inside their
+  todo's test scope (see Check 3).
+
+------------------------------------------------------------
+SUMMARY
+------------------------------------------------------------
+Implementation rows: 16 (all `- [x]`, all with References/Acceptance/QA/Commit/category)
+Final rows:         4  (F1..F4 all `- [ ]`)
+Diff:               62 files, +6049/-34, no `.omo/`, no out-of-scope product file
+Ledger:             16/16 task-completed, T1..T16 complete
+Guardrails:         all 6 Must-NOT-Have respected
+Verdict: APPROVE

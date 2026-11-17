@@ -1,0 +1,297 @@
+================================================================
+T17 evidence — 2026-11-17T00:54:09-03:00
+worktree: /root/workspace/projetos/label-studio-wt/ugda-final branch: ulw/user-groups-dataset-access-final
+================================================================
+
+### STEP 0: baseline git status (pre-existing dirty files noted)
+ M label_studio/core/static/js/sw.js
+?? label_studio/core/static/js/manifest.json
+?? label_studio/core/static/js/sw.js.map
+
+### STEP 1a: uvx ruff check --fix <python files>
+F841 Local variable `User` is assigned to but never used
+   --> label_studio/projects/tests/test_access.py:144:9
+    |
+142 |         from django.contrib.auth import get_user_model
+143 |
+144 |         User = get_user_model()
+    |         ^^^^
+145 |         user = UserFactory()
+146 |         user.is_superuser = True
+    |
+help: Remove assignment to unused variable `User`
+    |
+143 |
+    -         User = get_user_model()
+144 +         get_user_model()
+145 |         user = UserFactory()
+    |
+note: This is an unsafe fix and may change runtime behavior
+
+Found 6 errors (5 fixed, 1 remaining).
+1 unsafe fix available with `--fix --unsafe-fixes`.
+EXIT=1
+
+### STEP 1b: uvx ruff format <python files>
+9 files reformatted, 27 files left unchanged
+EXIT=0
+
+### STEP 1c: uvx ruff check <python files>  (must be clean)
+F841 Local variable `User` is assigned to but never used
+   --> label_studio/projects/tests/test_access.py:144:9
+    |
+142 |         from django.contrib.auth import get_user_model
+143 |
+144 |         User = get_user_model()
+    |         ^^^^
+145 |         user = UserFactory()
+146 |         user.is_superuser = True
+    |
+help: Remove assignment to unused variable `User`
+    |
+143 |
+    -         User = get_user_model()
+144 +         get_user_model()
+145 |         user = UserFactory()
+    |
+note: This is an unsafe fix and may change runtime behavior
+
+Found 1 error.
+1 unsafe fix available with `--fix --unsafe-fixes`.
+EXIT=1
+
+### STEP 1d: uvx ruff format --check <python files>  (must be clean)
+36 files already formatted
+EXIT=0
+
+### git diff after ruff (files touched)
+ M label_studio/core/api_permissions.py
+ M label_studio/core/permissions.py
+ M label_studio/core/static/js/sw.js
+ M label_studio/groups/api.py
+ M label_studio/groups/models.py
+ M label_studio/groups/serializers.py
+ M label_studio/groups/tests/test_migrations.py
+ M label_studio/groups/tests/test_models.py
+ M label_studio/io_storages/api.py
+ M label_studio/io_storages/tests/test_route_access.py
+ M label_studio/projects/api.py
+ M label_studio/projects/tests/test_route_access.py
+ M label_studio/users/tests/test_admin_api.py
+?? label_studio/core/static/js/manifest.json
+?? label_studio/core/static/js/sw.js.map
+
+### STEP 1e: manual F841 fix (test_access.py:144) — removed dead `User = get_user_model()` + now-unused local import
+Reason: F2 evidence lists F841 as in-scope for T17; User was referenced only by its own assignment; get_user_model() is a pure registry accessor (no side effects). No behavior change.
+class TestHelpers:
+    def test_is_admin_user_superuser(self):
+        user = UserFactory()
+        user.is_superuser = True
+        user.save(update_fields=['is_superuser'])
+        assert is_admin_user(user) is True
+
+    def test_is_admin_user_flag(self):
+        user = UserFactory()
+
+### STEP 1f: uvx ruff check <python files>  (re-run, must be clean)
+All checks passed!
+EXIT=0
+
+### STEP 1g: uvx ruff format --check <python files>  (re-run, must be clean)
+36 files already formatted
+EXIT=0
+
+### STEP 2a: bunx biome check --write <frontend files>
+/root/workspace/projetos/label-studio-wt/ugda-final/web/apps/labelstudio/src/pages/Admin apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/config/ApiConfig.test.ts apps/labelstudio/src/types/admin.ts apps/labelstudio/src/pages/index.js apps/labelstudio/src/components/Menubar/Menubar.jsx internalError/io  INTERNAL  ━━━━━━━━━━
+
+  × No such file or directory (os error 2)
+  
+  ! This diagnostic was derived from an internal Biome error. Potential bug, please report it if necessary.
+  
+
+Checked 0 files in 2ms. No fixes applied.
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × No files were processed in the specified paths.
+  
+  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.
+  
+  i These paths were provided but ignored:
+  
+  - apps/labelstudio/src/pages/Admin apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/config/ApiConfig.test.ts apps/labelstudio/src/types/admin.ts apps/labelstudio/src/pages/index.js apps/labelstudio/src/components/Menubar/Menubar.jsx
+  
+
+EXIT=1
+
+### STEP 2b: bunx biome check <frontend files>  (re-run)
+/root/workspace/projetos/label-studio-wt/ugda-final/web/apps/labelstudio/src/pages/Admin apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/config/ApiConfig.test.ts apps/labelstudio/src/types/admin.ts apps/labelstudio/src/pages/index.js apps/labelstudio/src/components/Menubar/Menubar.jsx internalError/io  INTERNAL  ━━━━━━━━━━
+
+  × No such file or directory (os error 2)
+  
+  ! This diagnostic was derived from an internal Biome error. Potential bug, please report it if necessary.
+  
+
+Checked 0 files in 1971µs. No fixes applied.
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × No files were processed in the specified paths.
+  
+  i Check your biome.json or biome.jsonc to ensure the paths are not ignored by the configuration.
+  
+  i These paths were provided but ignored:
+  
+  - apps/labelstudio/src/pages/Admin apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/config/ApiConfig.test.ts apps/labelstudio/src/types/admin.ts apps/labelstudio/src/pages/index.js apps/labelstudio/src/components/Menubar/Menubar.jsx
+  
+
+EXIT=1
+
+### STEP 2a-retry: bunx biome check --write <frontend files> (explicit args; prior attempt failed due to zsh no word-split)
+apps/labelstudio/src/pages/Admin/GroupsPage.jsx:426:15 plugin ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! [ds/raw-control] Use Button from @humansignal/ui (look filled, outlined or ghost; aria-label when icon-only), not a raw <button>.
+  
+    424 │           return (
+    425 │             <li key={group.id} className="flex items-stretch">
+  > 426 │               <button
+        │               ^^^^^^^
+  > 427 │                 type="button"
+         ...
+  > 443 │                 ) : null}
+  > 444 │               </button>
+        │               ^^^^^^^^^
+    445 │               <div className="flex items-center">
+    446 │                 <Dropdown.Trigger
+  
+
+Checked 12 files in 84ms. No fixes applied.
+Found 1 warning.
+EXIT=0
+
+### STEP 2b-retry: bunx biome check <frontend files> (must be clean; ds/raw-control warning acceptable)
+apps/labelstudio/src/pages/Admin/GroupsPage.jsx:426:15 plugin ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! [ds/raw-control] Use Button from @humansignal/ui (look filled, outlined or ghost; aria-label when icon-only), not a raw <button>.
+  
+    424 │           return (
+    425 │             <li key={group.id} className="flex items-stretch">
+  > 426 │               <button
+        │               ^^^^^^^
+  > 427 │                 type="button"
+         ...
+  > 443 │                 ) : null}
+  > 444 │               </button>
+        │               ^^^^^^^^^
+    445 │               <div className="flex items-center">
+    446 │                 <Dropdown.Trigger
+  
+
+Checked 12 files in 45ms. No fixes applied.
+Found 1 warning.
+EXIT=0
+
+### STEP 3a: pytest (python tests after lint)
+Command: DJANGO_DB=sqlite uv run pytest label_studio/groups/tests label_studio/users/tests/test_admin_api.py label_studio/users/tests/test_admin_groups.py label_studio/users/tests/test_hotkeys_api.py label_studio/tests/test_admin_groups_integration.py -q
+........................................................................ [ 75%]
+........................                                       [100%]
+96 passed, 10 subtests passed in 106.28s (0:01:46)
+EXIT=0
+
+### STEP 3b: bun run ls:unit src/pages/Admin src/config (frontend tests after lint)
+Command: bun run ls:unit src/pages/Admin src/config
+$ bun test --dom apps/labelstudio/src src/pages/Admin src/config
+bun test v1.3.14 (0d9b296a)
+
+ 88 pass
+ 0 fail
+ 214 expect() calls
+Ran 88 tests across 7 files. [5.31s]
+EXIT=0
+
+### STEP 3c: pytest on remaining reformatted test files (affected by T17, outside task's fixed list)
+Command: DJANGO_DB=sqlite uv run pytest label_studio/projects/tests/test_access.py label_studio/projects/tests/test_route_access.py label_studio/io_storages/tests/test_route_access.py -q
+...............................................................          [100%]
+63 passed in 67.08s (0:01:07)
+EXIT=0
+
+### STEP 4: scope verification
+--- 4a: final git status --porcelain ---
+ M label_studio/core/api_permissions.py
+ M label_studio/core/permissions.py
+ M label_studio/core/static/js/sw.js
+ M label_studio/groups/api.py
+ M label_studio/groups/models.py
+ M label_studio/groups/serializers.py
+ M label_studio/groups/tests/test_migrations.py
+ M label_studio/groups/tests/test_models.py
+ M label_studio/io_storages/api.py
+ M label_studio/io_storages/tests/test_route_access.py
+ M label_studio/projects/api.py
+ M label_studio/projects/tests/test_access.py
+ M label_studio/projects/tests/test_route_access.py
+ M label_studio/users/tests/test_admin_api.py
+?? label_studio/core/static/js/manifest.json
+?? label_studio/core/static/js/sw.js.map
+
+--- 4b: changed files vs baseline (must be subset of SCOPE + pre-existing sw artifacts) ---
+Baseline dirty (pre-T17): label_studio/core/static/js/sw.js (M), manifest.json (??), sw.js.map (??)
+T17-changed files:
+  label_studio/core/api_permissions.py
+  label_studio/core/permissions.py
+  label_studio/groups/api.py
+  label_studio/groups/models.py
+  label_studio/groups/serializers.py
+  label_studio/groups/tests/test_migrations.py
+  label_studio/groups/tests/test_models.py
+  label_studio/io_storages/api.py
+  label_studio/io_storages/tests/test_route_access.py
+  label_studio/projects/api.py
+  label_studio/projects/tests/test_access.py
+  label_studio/projects/tests/test_route_access.py
+  label_studio/users/tests/test_admin_api.py
+T17 frontend changes: 0 (expect 0)
+
+--- 4c: no as any / @ts-ignore introduced in scoped frontend (biome applied 0 fixes) ---
+grep_exit=0 (1 = none found)
+
+--- 4d: final ruff gate (both) ---
+All checks passed!
+RUFF_CHECK_EXIT=0
+36 files already formatted
+RUFF_FORMAT_EXIT=0
+
+--- 4e: final biome gate ---
+apps/labelstudio/src/pages/Admin/GroupsPage.jsx:426:15 plugin ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! [ds/raw-control] Use Button from @humansignal/ui (look filled, outlined or ghost; aria-label when icon-only), not a raw <button>.
+  
+    424 │           return (
+    425 │             <li key={group.id} className="flex items-stretch">
+  > 426 │               <button
+        │               ^^^^^^^
+  > 427 │                 type="button"
+         ...
+  > 443 │                 ) : null}
+  > 444 │               </button>
+        │               ^^^^^^^^^
+    445 │               <div className="flex items-center">
+    446 │                 <Dropdown.Trigger
+  
+
+Checked 12 files in 52ms. No fixes applied.
+Found 1 warning.
+BIOME_EXIT=0
+
+### SUMMARY
+ruff check: PASS (All checks passed)
+ruff format --check: PASS (36 files already formatted)
+biome check: PASS (exit 0; only pre-existing ds/raw-control warning in GroupsPage.jsx:426)
+pytest (task list): 96 passed, 10 subtests passed
+pytest (extra affected): 63 passed
+bun run ls:unit src/pages/Admin src/config: 88 pass, 0 fail
+scope: all T17 changes within SCOPE; sw.js/manifest.json/sw.js.map pre-existing build artifacts (documented in f2/verify-t14-t15-t16 evidence), untouched by T17
+
+### STEP 4c-retry: as any / @ts-ignore in scoped frontend (prior attempt grepped wrong cwd 'apps' from repo root — invalid)
+--- scoped files only ---
+GREP_EXIT=1 (1 = none found, expected)
+--- confirm paths exist for the grep ---
+paths OK

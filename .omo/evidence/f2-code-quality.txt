@@ -1,0 +1,151 @@
+F2 CODE QUALITY VERIFICATION
+============================
+Date: 2026-11-17
+Worktree: /root/workspace/projetos/label-studio-wt/ugda-final
+Base commit: 6ca3a86bc (merge: wave 5 - integracao, validador de unicidade e correcoes)
+
+VERDICT: APPROVE (with minor lint/format notes)
+
+===========================================
+1. BACKEND TESTS (pytest)
+===========================================
+Command: DJANGO_DB=sqlite uv run pytest label_studio/groups/tests label_studio/users/tests label_studio/projects/tests label_studio/tests/test_admin_groups_integration.py -vv
+
+Result: 349 passed, 36 subtests passed in 225.37s (3:45)
+
+All tests pass. No failures. Coverage includes:
+- groups: API CRUD, permissions, migrations, models (30 tests)
+- users: admin API, permissions, hotkeys, serializers, auth (180+ tests)
+- projects: access control, API, models, import status, serializers (120+ tests)
+- integration: admin grant flow, visibility matrix, API gate (11 tests)
+
+===========================================
+2. BACKEND LINT (ruff check)
+===========================================
+Command: uvx ruff check label_studio/groups label_studio/users label_studio/projects label_studio/tests/test_admin_groups_integration.py
+
+Result: 4 errors found (3 fixable, 1 unsafe fix)
+
+Issues:
+- I001: Import block unsorted in groups/tests/test_migrations.py
+- F401: Unused import ProjectFactory in groups/tests/test_models.py
+- F841: Unused variable User in projects/tests/test_access.py:144
+- F401: Unused import Project in projects/tests/test_route_access.py:19
+
+Severity: MINOR - all in test files, no production code affected.
+All fixable with `uvx ruff check --fix`.
+
+===========================================
+3. BACKEND FORMAT (ruff format --check)
+===========================================
+Command: uvx ruff format --check label_studio/groups label_studio/users label_studio/projects label_studio/tests/test_admin_groups_integration.py
+
+Result: 6 files would be reformatted, 84 files already formatted
+
+Files needing reformatting:
+- label_studio/groups/api.py (line wrapping)
+- label_studio/groups/models.py (line wrapping)
+- label_studio/groups/serializers.py (line wrapping)
+- label_studio/projects/api.py (line wrapping)
+- label_studio/projects/tests/test_route_access.py (multiple functions)
+- label_studio/users/tests/test_admin_api.py (multiple assertions)
+
+Severity: MINOR - style only, no logic changes.
+Fixable with `uvx ruff format`.
+
+===========================================
+4. FRONTEND UNIT TESTS
+===========================================
+Command: cd web && bun run ls:unit src/pages/Admin src/config
+
+Result: 88 pass, 0 fail, 214 expect() calls
+Ran 88 tests across 7 files in 6.21s
+
+All tests pass.
+
+===========================================
+5. FRONTEND LINT (biome check)
+===========================================
+Command: cd web && bunx biome check apps/labelstudio/src/pages/Admin apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/types/admin.ts
+
+Result: Checked 9 files in 51ms. Found 1 warning.
+
+Warning:
+- GroupsPage.jsx:426:15 - Use Button from @humansignal/ui instead of raw <button>
+
+Severity: MINOR - design system preference, not a bug.
+
+===========================================
+6. FRONTEND BUILD
+===========================================
+Command: cd web && bun run build
+
+Result: Build succeeded in 27.02s
+
+Output:
+- 11289 modules transformed
+- Service worker built (sw.js 18.6kb, sw.js.map 147.9kb)
+- Service worker precached 18 entries (~8.9MB manifest)
+- Main bundle: 2.2MB (gzip: 719KB)
+- Vendor bundle: 1.7MB (gzip: 544KB)
+
+Warnings:
+- Browserslist data 8 months old (non-blocking)
+- Some chunks >2000KB (existing, not new)
+
+No build errors. Static files (sw.js, manifest.json, sw.js.map) were not present before build, no restoration needed.
+
+===========================================
+7. CODE QUALITY CHECKS
+===========================================
+
+7a. TypeScript escape hatches (as any / @ts-ignore / @ts-expect-error)
+Result: NONE FOUND in new frontend files
+- web/apps/labelstudio/src/pages/Admin/*
+- web/apps/labelstudio/src/config/ApiConfig.js
+- web/apps/labelstudio/src/types/admin.ts
+
+7b. Circular imports
+Result: NO CIRCULAR IMPORTS
+- All new modules import cleanly
+- pytest collection succeeded (349 tests collected)
+- Django setup succeeded in test environment
+
+7c. N+1 query patterns
+Result: NO OBVIOUS N+1 ISSUES
+
+Analyzed:
+- projects/functions/access.py:
+  * user_group_project_ids() uses single query with values_list().distinct()
+  * accessible_projects() uses id__in subquery (Django optimizes to single query)
+  * filter_accessible() uses single filter with __in lookup
+  
+- groups/api.py:
+  * All list endpoints use select_related() for foreign keys
+  * No loops with nested queries detected
+  * get_queryset() methods properly scoped
+
+- groups/models.py:
+  * No .all() calls in loops
+  * Proper use of related_name for reverse lookups
+
+===========================================
+SUMMARY
+===========================================
+
+PASSING:
+✓ Backend tests: 349/349 passed
+✓ Frontend tests: 88/88 passed
+✓ Frontend build: succeeded
+✓ No TypeScript escape hatches
+✓ No circular imports
+✓ No N+1 query patterns
+
+MINOR ISSUES (non-blocking):
+- 4 ruff lint errors (unused imports in test files)
+- 6 files need ruff formatting
+- 1 biome warning (raw button vs design system component)
+
+All issues are cosmetic or in test files. No production code bugs, no security issues, no performance problems detected.
+
+RECOMMENDATION: APPROVE for merge. Lint/format fixes can be applied in a follow-up commit if desired.

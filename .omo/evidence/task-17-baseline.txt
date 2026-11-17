@@ -1,0 +1,7 @@
+=== T17 baseline git status (before lint) ===
+ M label_studio/core/static/js/sw.js
+?? label_studio/core/static/js/manifest.json
+?? label_studio/core/static/js/sw.js.map
+--- baseline diff stat ---
+ label_studio/core/static/js/sw.js | 175 +-------------------------------------
+ 1 file changed, 3 insertions(+), 172 deletions(-)

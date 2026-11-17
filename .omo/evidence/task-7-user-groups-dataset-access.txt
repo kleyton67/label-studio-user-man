@@ -1,0 +1,375 @@
+================================================================================
+T7 - Admin API /api/admin/groups (groups + members + projects)
+================================================================================
+Date:        2026-11-16
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave3
+Branch:      ulw/user-groups-dataset-access-wave3
+Plan row:    .omo/plans/user-groups-dataset-access.md  row "- [ ] 7."
+Main checkout /root/workspace/projetos/label-studio was NOT edited (only this
+evidence file was written under .omo/evidence/).
+
+Scope respected: label_studio/groups/{serializers,api,urls}.py, core/urls.py
+(1 line), and the new label_studio/groups/tests/test_api.py. label_studio/users/
+was NOT touched (it is owned by the parallel T8/T9 worker; its changes appear in
+git status but are not mine).
+
+--------------------------------------------------------------------------------
+1. DIRTY WORKTREE (adversarial class: dirty_worktree)
+--------------------------------------------------------------------------------
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave3
+$ git status --short
+ M label_studio/core/urls.py
+ M label_studio/groups/api.py
+ M label_studio/groups/serializers.py
+ M label_studio/groups/urls.py
+ M label_studio/users/admin.py          <-- parallel T9 worker, NOT T7
+ M label_studio/users/api.py            <-- parallel T8 worker, NOT T7
+ M label_studio/users/urls.py           <-- parallel T8 worker, NOT T7
+?? label_studio/groups/tests/test_api.py <-- T7 new test
+?? label_studio/users/tests/test_admin_api.py   <-- parallel T8 worker, NOT T7
+?? label_studio/users/tests/test_admin_groups.py <-- parallel T9 worker, NOT T7
+
+$ git diff --stat
+ label_studio/core/urls.py          |   1 +
+ label_studio/groups/api.py         | 111 ++++++++++++++++++++++++++++++++
+ label_studio/groups/serializers.py |  39 +++++++++++++
+ label_studio/groups/urls.py        |  28 ++++++++
+ label_studio/users/admin.py        |  29 +++++- label_studio/users/api.py        | 175 ++++++++++++++++++++++++++++++++++++++++++++++++++++- label_studio/users/urls.py       |   4 +
+ 7 files changed, 384 insertions(+), 3 deletions(-)
+
+T7 files only:
+ - label_studio/core/urls.py            (+1 line include)
+ - label_studio/groups/api.py           (+111)
+ - label_studio/groups/serializers.py   (+39)
+ - label_studio/groups/urls.py          (+28)
+ - label_studio/groups/tests/test_api.py (new, 18 tests)
+
+--------------------------------------------------------------------------------
+2. CHANGES
+--------------------------------------------------------------------------------
+- label_studio/groups/serializers.py
+    + UserGroupSerializer: id, organization, name, description, created_by,
+      created_at, updated_at; organization/created_by/timestamps read-only.
+    + UserGroupMemberSerializer: id, group, user (pk, writable), user_email,
+      user_name (read-only), created_at; group/created_at read-only.
+    + UserGroupProjectSerializer: id, group, project (pk, writable),
+      project_title (read-only), created_at; group/created_at read-only.
+- label_studio/groups/api.py
+    + AdminGroupMixin: permission_classes = [IsAuthenticated, IsOrganizationAdmin]
+      (imported from core.api_permissions); get_group() scoped to
+      request.user.active_organization (404 otherwise).
+    + AdminGroupListAPI (ListCreateAPIView): GET scoped to active org;
+      POST sets organization=active org, created_by=request.user
+      (client-supplied organization/created_by are read-only and ignored).
+    + AdminGroupDetailAPI (RetrieveUpdateDestroyAPIView): GET/PATCH/DELETE,
+      queryset scoped to active org.
+    + AdminGroupMemberListAPI (ListCreateAPIView): GET members of the group;
+      POST body {"user": <pk>} validates the user is an active (deleted_at IS
+      NULL) OrganizationMember of the active org, then get_or_create (duplicates
+      idempotent, always 201).
+    + AdminGroupMemberDetailAPI (DestroyAPIView): DELETE by user_pk.
+    + AdminGroupProjectListAPI (ListCreateAPIView): GET links; POST body
+      {"project": <pk>} validates project.organization_id == active org id,
+      then get_or_create (duplicates idempotent, always 201).
+    + AdminGroupProjectDetailAPI (DestroyAPIView): DELETE by project_pk.
+- label_studio/groups/urls.py
+    Routes (full prefix lives here, matching organizations/urls.py convention):
+      api/admin/groups/                         -> AdminGroupListAPI       (admin-group-list)
+      api/admin/groups/<int:pk>/                -> AdminGroupDetailAPI     (admin-group-detail)
+      api/admin/groups/<int:pk>/members/        -> AdminGroupMemberListAPI (admin-group-member-list)
+      api/admin/groups/<int:pk>/members/<int:user_pk>/ -> AdminGroupMemberDetailAPI (admin-group-member-detail)
+      api/admin/groups/<int:pk>/projects/       -> AdminGroupProjectListAPI (admin-group-project-list)
+      api/admin/groups/<int:pk>/projects/<int:project_pk>/ -> AdminGroupProjectDetailAPI (admin-group-project-detail)
+- label_studio/core/urls.py
+    + re_path(r'^', include('groups.urls')),   (after users.urls; equivalent include)
+- label_studio/groups/tests/test_api.py (new): 18 tests, pytest-django +
+    rest_framework.test.APIClient, following organizations/tests/test_api.py /
+    projects/tests/test_access.py style.
+
+--------------------------------------------------------------------------------
+3. COMMANDS + REAL OUTPUTS
+--------------------------------------------------------------------------------
+=== 3a. required pytest command =============================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave3
+$ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /root/workspace/projetos/label-studio-wt/ugda-wave3/.venv/bin/python
+cachedir: .pytest_cache
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave3
+configfile: pyproject.toml
+plugins: xdist-3.8.0, anyio-4.14.2, requests-mock-1.12.1, env-1.6.0, cov-7.1.0, django-4.12.0, tavern-3.3.3, Faker-40.8.0, mock-3.15.1
+collecting ... collected 30 items
+
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_lists_only_active_organization_groups PASSED [  3%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_creates_group PASSED [  6%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_create_ignores_client_supplied_organization_and_created_by PASSED [ 10%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_renames_group PASSED [ 13%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_deletes_group PASSED [ 16%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_gets_group_detail PASSED [ 20%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_list_and_remove_member PASSED [ 23%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_requires_active_organization_membership PASSED [ 26%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_is_idempotent PASSED [ 30%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_remove_missing_member_is_404 PASSED [ 33%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_list_and_revoke_project PASSED [ 36%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_must_belong_to_active_organization PASSED [ 40%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_is_idempotent PASSED [ 43%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_revoke_missing_project_link_is_404 PASSED [ 46%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_plain_member_is_forbidden_on_every_endpoint PASSED [ 50%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_anonymous_is_rejected PASSED [ 53%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_other_organization_group_is_404 PASSED [ 56%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_cross_organization_project_link_is_404 PASSED [ 60%]
+label_studio/groups/tests/test_migrations.py::test_backfill_creates_default_group_for_each_organization PASSED [ 63%]
+label_studio/groups/tests/test_migrations.py::test_backfill_uses_organization_created_by PASSED [ 66%]
+label_studio/groups/tests/test_migrations.py::test_backfill_adds_active_members_and_skips_soft_deleted_members PASSED [ 70%]
+label_studio/groups/tests/test_migrations.py::test_backfill_links_all_projects_of_each_organization PASSED [ 73%]
+label_studio/groups/tests/test_migrations.py::test_backfill_is_idempotent_when_called_twice PASSED [ 76%]
+label_studio/groups/tests/test_models.py::test_create_group PASSED       [ 80%]
+label_studio/groups/tests/test_models.py::test_duplicate_name_in_same_organization_raises_integrity_error PASSED [ 83%]
+label_studio/groups/tests/test_models.py::test_same_name_allowed_in_different_organizations PASSED [ 86%]
+label_studio/groups/tests/test_models.py::test_duplicate_member_raises_integrity_error PASSED [ 90%]
+label_studio/groups/tests/test_models.py::test_duplicate_project_link_raises_integrity_error PASSED [ 93%]
+label_studio/groups/tests/test_models.py::test_has_permission_true_for_user_in_organization PASSED [ 96%]
+label_studio/groups/tests/test_models.py::test_has_permission_false_for_user_in_another_organization PASSED [100%]
+
+============================= 30 passed in 52.74s ==============================
+
+=== 3b. plan QA scenario: happy (-k admin) =================================
+$ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests/test_api.py -vv -k "admin"
+collecting ... collected 18 items
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_lists_only_active_organization_groups PASSED [  5%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_creates_group PASSED [ 11%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_create_ignores_client_supplied_organization_and_created_by PASSED [ 16%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_renames_group PASSED [ 22%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_deletes_group PASSED [ 27%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_gets_group_detail PASSED [ 33%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_list_and_remove_member PASSED [ 38%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_requires_active_organization_membership PASSED [ 44%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_is_idempotent PASSED [ 50%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_remove_missing_member_is_404 PASSED [ 55%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_list_and_revoke_project PASSED [ 61%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_must_belong_to_active_organization PASSED [ 66%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_is_idempotent PASSED [ 72%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_revoke_missing_project_link_is_404 PASSED [ 77%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_plain_member_is_forbidden_on_every_endpoint PASSED [ 83%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_anonymous_is_rejected PASSED [ 88%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_other_organization_group_is_404 PASSED [ 94%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_cross_organization_project_link_is_404 PASSED [100%]
+
+============================= 18 passed in 43.62s ==============================
+
+=== 3c. plan QA scenario: failure (-k forbidden) ============================
+$ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests/test_api.py -vv -k "forbidden"
+collecting ... collected 18 items / 17 deselected / 1 selected
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_plain_member_is_forbidden_on_every_endpoint PASSED [100%]
+
+====================== 1 passed, 17 deselected in 26.39s =======================
+
+=== 3d. Django system check =================================================
+$ DJANGO_DB=sqlite uv run python label_studio/manage.py check
+System check identified no issues (1 silenced).
+
+=== 3e. migration drift check ===============================================
+$ DJANGO_DB=sqlite uv run python label_studio/manage.py makemigrations --check --dry-run
+No changes detected
+
+=== 3f. URL reverse sanity ==================================================
+$ DJANGO_DB=sqlite uv run python label_studio/manage.py shell -c "from django.urls import reverse; ..."
+/api/admin/groups/
+/api/admin/groups/1/
+/api/admin/groups/1/members/
+/api/admin/groups/1/members/2/
+/api/admin/groups/1/projects/
+/api/admin/groups/1/projects/2/
+
+=== 3g. manual QA: scratch DB migrate =======================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave3
+$ rm -f /tmp/opencode/t7-qa.sqlite3
+$ DATABASE_NAME=/tmp/opencode/t7-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py migrate
+  ... (full migrate output) ...
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more... OK
+  Applying webhooks.0001_initial... OK
+  Applying webhooks.0002_auto_20220319_0013... OK
+  Applying webhooks.0003_alter_webhookaction_action... OK
+  Applying webhooks.0004_auto_20221221_1101... OK
+  Applying webhooks.0005_webhook_consecutive_failures... OK
+
+=== 3h. manual QA: seed owner/admin + member + project ======================
+$ DATABASE_NAME=/tmp/opencode/t7-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "$(cat /tmp/opencode/t7_seed.py)"
+OWNER_TOKEN=3648479bde1d0a730405cf9e9707ff143a099a9a
+MEMBER_TOKEN=886207940d575b4b0b48d2f38f4a3ee323d961ff
+MEMBER_ID=2
+PROJECT_ID=1
+(seed: owner is_admin=True, org creator, active org set; member added via
+org.add_user + active org; org.jwt.legacy_api_tokens_enabled=True; 1 project)
+
+=== 3i. manual QA: runserver 50080 + real curl ===============================
+$ DATABASE_NAME=/tmp/opencode/t7-qa.sqlite3 DJANGO_DB=sqlite \
+    nohup uv run python label_studio/manage.py runserver 50080 --noreload \
+    > /tmp/opencode/t7-server.log 2>&1 &
+$ echo $! > /tmp/opencode/t7-server.pid
+1696582
+readiness poll (unauthenticated whoami -> 401): ready after 1s (http 401)
+
+--- 1. admin whoami ---
+HTTP/1.1 200 OK
+{"id":1,"username":"owner","email":"owner@example.com","active_organization":1,
+ "permissions":[..."users.manage","groups.view","groups.create","groups.change","groups.delete"...],
+ "is_admin":true}
+
+--- 2. admin POST /api/admin/groups/ ---
+{"id":1,"organization":1,"name":"QA Group","description":"manual qa","created_by":1,
+ "created_at":"2026-11-16T20:29:27.530092-03:00","updated_at":"2026-11-16T20:29:27.530120-03:00"}
+HTTP_STATUS:201
+GROUP_ID=1
+
+--- 3. admin GET /api/admin/groups/ ---
+HTTP/1.1 200 OK
+[{"id":1,"organization":1,"name":"QA Group","description":"manual qa","created_by":1,
+ "created_at":"2026-11-16T20:29:27.530092-03:00","updated_at":"2026-11-16T20:29:27.530120-03:00"}]
+
+--- 4. admin POST /api/admin/groups/1/members/ {user:2} ---
+HTTP/1.1 201 Created
+{"id":1,"group":1,"user":2,"user_email":"member@example.com",
+ "user_name":"member@example.com","created_at":"2026-11-16T20:29:27.589124-03:00"}
+
+--- 5. admin GET /api/admin/groups/1/members/ ---
+HTTP/1.1 200 OK
+[{"id":1,"group":1,"user":2,"user_email":"member@example.com",
+ "user_name":"member@example.com","created_at":"2026-11-16T20:29:27.589124-03:00"}]
+
+--- 6. admin POST /api/admin/groups/1/projects/ {project:1} ---
+HTTP/1.1 201 Created
+{"id":1,"group":1,"project":1,"project_title":"QA Project",
+ "created_at":"2026-11-16T20:29:27.626653-03:00"}
+
+--- 7. admin GET /api/admin/groups/1/projects/ ---
+HTTP/1.1 200 OK
+[{"id":1,"group":1,"project":1,"project_title":"QA Project",
+ "created_at":"2026-11-16T20:29:27.626653-03:00"}]
+
+--- 8. member GET /api/admin/groups/ (expect 403) ---
+HTTP/1.1 403 Forbidden
+{"id":"9f5f2978-52a0-4ab7-b7cb-de34b8d3374e","status_code":403,
+ "detail":"You do not have permission to perform this action."}
+
+--- 9. member GET /api/admin/groups/1/ (expect 403) ---
+HTTP/1.1 403 Forbidden
+{"id":"675635d7-45cf-4c51-b7f4-c10d8ac3fa0a","status_code":403,
+ "detail":"You do not have permission to perform this action."}
+
+--- 10. admin GET /api/admin/groups/1/ (expect 200) ---
+HTTP/1.1 200 OK
+{"id":1,"organization":1,"name":"QA Group","description":"manual qa","created_by":1,
+ "created_at":"2026-11-16T20:29:27.530092-03:00","updated_at":"2026-11-16T20:29:27.530120-03:00"}
+
+Full raw curl output (all headers): /tmp/opencode/t7-curl.log (kept during the
+run; temp dir, removed after evidence capture).
+
+=== 3j. manual QA teardown ==================================================
+$ kill 1698281 1698289   # uv wrapper + python child from t7-server.pid discovery
+$ ps -eo pid,ppid,cmd | grep -E "[r]unserver 50080" || echo 'no runserver process'
+no runserver process
+$ curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:50080/api/current-user/whoami
+000
+$ rm -f /tmp/opencode/t7-qa.sqlite3 /tmp/opencode/t7-server.pid \
+       /tmp/opencode/t7_seed.py /tmp/opencode/t7_curl.sh
+scratch DB removed
+Server killed; port 50080 closed (connection refused, http 000).
+
+--------------------------------------------------------------------------------
+4. ADVERSARIAL CLASSES
+--------------------------------------------------------------------------------
+- misleading_success_output: PASS. The pytest summary above ("30 passed in
+  52.74s", "18 passed in 43.62s", "1 passed, 17 deselected in 26.39s") is the real
+  tail of the actual runs; the curl statuses above are the real HTTP responses.
+  No output was fabricated or hand-edited.
+- stale_state: PASS. The manual QA server ran against a freshly migrated scratch
+  DB (/tmp/opencode/t7-qa.sqlite3) seeded with real users/org/project; whoami
+  returned is_admin:true for the owner and the group responses reflect the code
+  in this worktree. Tests use the current models/migrations.
+- dirty_worktree: PASS. git status above; T7 touched only its 4 in-scope files
+  plus the new test. label_studio/users/* changes belong to the parallel T8/T9
+  worker and were not read-modify-written by T7.
+- security: PASS.
+  * Non-admin: plain member (is_admin=False, not org creator) gets 403 on every
+    endpoint (pytest test_plain_member_is_forbidden_on_every_endpoint, 11 method/
+    URL combinations) and the live server returned 403 for member GET list and
+    GET detail.
+  * Cross-org: another org's group is 404 for GET/PATCH/DELETE detail and for the
+    nested member/project lists; a cross-org project link DELETE is 404; a
+    cross-org project POST is rejected 400; the list endpoint is scoped to the
+    active org.
+  * Mass-assignment: client-supplied organization/created_by on group create are
+    ignored (read-only) - test_create_ignores_client_supplied_organization_and_created_by.
+  * No declarative permission_required used; every view sets
+    permission_classes = [IsAuthenticated, IsOrganizationAdmin].
+- performance: PASS (light). All list querysets use select_related
+  (created_by / user / project) so serialization does not add N+1 queries;
+  member/project lookups filter by group + user_id/project_id and use
+  get_or_create on the unique_together pair (no duplicate rows).
+
+--------------------------------------------------------------------------------
+5. RISKS
+--------------------------------------------------------------------------------
+- IsOrganizationAdmin gates on request.user.has_perm('users.manage'), which the
+  T2 rules backend resolves via is_org_admin (is_superuser OR is_admin OR active
+  org creator). This is the intended admin definition for this plan; a plain
+  member is denied. No change to that logic was made here.
+- Duplicate POSTs always return 201 (idempotent in effect: no second row). If a
+  client strictly expects 200 for an already-existing link, that is a contract
+  choice to revisit in the frontend task; the plan only requires "ignore
+  duplicates".
+- `UserGroupMemberSerializer.user` and `UserGroupProjectSerializer.project` are
+  writable pk fields; the org-membership / org-ownership validation lives in the
+  view (not in the serializer), so the error is a 400 ValidationError with a
+  field-specific message.
+- No pagination on the group/member/project lists (matches the plain-list
+  behaviour of other admin-ish endpoints here); PAGE_SIZE is not applied because
+  DEFAULT_PAGINATION_CLASS is unset. If lists grow large, add pagination later.
+- Manual QA used a throwaway sqlite DB and was torn down; nothing persists.
+
+--------------------------------------------------------------------------------
+6. CLEANUP
+--------------------------------------------------------------------------------
+- runserver killed; port 50080 closed (verified: no runserver process, curl 000).
+- Throwaway DB /tmp/opencode/t7-qa.sqlite3 removed.
+- /tmp/opencode/t7-server.log, t7-curl.log, t7-server.pid, t7_seed.py,
+  t7_curl.sh removed after evidence capture.
+- Dev sqlite DB (/root/.local/share/label-studio/label_studio.sqlite3) untouched
+  (QA used a dedicated DATABASE_NAME).
+- No commit, no push.
+
+--------------------------------------------------------------------------------
+7. DoneClaim
+--------------------------------------------------------------------------------
+{
+  "task": "T7",
+  "title": "API de grupos /api/admin/groups + testes",
+  "status": "done",
+  "changed_files": [
+    "label_studio/groups/serializers.py",
+    "label_studio/groups/api.py",
+    "label_studio/groups/urls.py",
+    "label_studio/core/urls.py",
+    "label_studio/groups/tests/test_api.py"
+  ],
+  "tests": {
+    "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave3 && DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv",
+    "result": "30 passed in 52.74s (18 new test_api.py tests + 12 pre-existing groups tests)"
+  },
+  "manual_qa": {
+    "artifact": "/root/workspace/projetos/label-studio/.omo/evidence/task-7-user-groups-dataset-access.txt",
+    "port": 50080,
+    "result": "admin whoami is_admin=true; POST group 201; GET list 200; POST member 201; GET members 200; POST project 201; GET projects 200; member GET list 403; member GET detail 403; admin GET detail 200"
+  },
+  "cleanup": "runserver killed (port 50080 closed), scratch DB /tmp/opencode/t7-qa.sqlite3 and t7-* temp files removed, dev DB untouched, no commit/push",
+  "risks": [
+    "duplicate POST returns 201 (idempotent, no second row) rather than 200",
+    "lists are unpaged (DEFAULT_PAGINATION_CLASS unset); add pagination if lists grow",
+    "org-membership/project-ownership validation is in the views (400), not the serializers"
+  ]
+}
+================================================================================

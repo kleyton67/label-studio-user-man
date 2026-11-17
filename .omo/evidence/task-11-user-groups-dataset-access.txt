@@ -1,0 +1,159 @@
+# T11 — Admin area shell: layout, routing, Menubar entry, gate, Django page view
+# Branch: ulw/user-groups-dataset-access-wave4
+# Worktree: /root/workspace/projetos/label-studio-wt/ugda-wave4
+# Date: 2026-11-16/17 (local)
+
+================================================================================
+CHANGED FILES (T11 only; ApiConfig.js/ApiConfig.test.ts/types/admin.ts are pre-existing uncommitted T10 work, untouched)
+================================================================================
+created  web/apps/labelstudio/src/pages/Admin/AdminPage.jsx        # gated layout + page set (path=/admin, title=Admin, SidebarMenu Users/Groups)
+created  web/apps/labelstudio/src/pages/Admin/index.js             # re-export AdminPage/AdminLayout
+created  web/apps/labelstudio/src/pages/Admin/AdminPage.test.jsx   # 6 bun tests
+modified web/apps/labelstudio/src/pages/index.js                   # register AdminPage in Pages
+modified web/apps/labelstudio/src/components/Menubar/Menubar.jsx   # {user?.is_admin && <Menu.Item label="Admin" to="/admin" .../>} + IconSettings import
+modified label_studio/users/views.py                               # admin_view(request, sub_path=None) @login_required
+modified label_studio/users/urls.py                                # admin/, admin/users/, admin/groups/ (names admin-area[-users|-groups])
+created  label_studio/users/templates/users/admin.html             # extends base.html, empty content block, frontend_settings breadcrumb "Admin"
+created  label_studio/users/tests/test_admin_view.py               # 5 pytest cases
+
+================================================================================
+FRONTEND UNIT TESTS — bun run ls:unit src/pages/Admin  (final tree)
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave4/web && bun run ls:unit src/pages/Admin
+$ bun test --dom apps/labelstudio/src src/pages/Admin
+bun test v1.3.14 (0d9b296a)
+
+ 47 pass
+ 0 fail
+ 70 expect() calls
+Ran 47 tests across 5 files. [1.77s]
+
+(5 files = the app's whole unit corpus: Sentry, ApiConfig, 2x DataManager, and the new
+ Admin/AdminPage.test.jsx. First run had 2 failures: MenuItem.jsx reads the bare `location`
+ global which bun --dom does not define; fixed in the test with a documented environment shim,
+ not by touching production code.)
+
+AdminPage.test.jsx cases (all pass):
+- registers the /admin route with the gated layout (path/title/layout statics)
+- renders the shell with Users and Groups entries for an admin
+- points the sidebar entries at /admin/users and /admin/groups
+- renders nothing and redirects home for a non-admin (is_admin=false)
+- renders nothing and redirects home when there is no authenticated user
+- waits for the session without flashing the shell or redirecting while loading (isLoading=true)
+
+================================================================================
+FRONTEND BUILD — bun run build
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave4/web && bun run build
+...
+✓ built in 26.64s
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 2000 kB after minification. Consider:   # pre-existing warning
+...
+  dist/apps/labelstudio/static/js/sw.js       18.6kb
+[service-worker] precached 18 entries (~8851672 bytes manifest payload)
+exit 0
+
+Build side effects restored afterwards (MUST NOT leave artifacts):
+  git checkout -- label_studio/core/static/js/sw.js
+  rm -f label_studio/core/static/js/manifest.json label_studio/core/static/js/sw.js.map
+Final `git status --short` shows no generated files (verified below).
+
+LINT:
+$ bunx biome check apps/labelstudio/src/pages/Admin .../Menubar/Menubar.jsx .../pages/index.js
+Checked 5 files in 37ms. No fixes applied.   (clean)
+
+================================================================================
+DJANGO TESTS — pytest label_studio/users/tests/test_admin_view.py -vv
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave4 && DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_view.py -vv
+label_studio/users/tests/test_admin_view.py::TestAdminAreaView::test_admin_gets_the_shell PASSED
+label_studio/users/tests/test_admin_view.py::TestAdminAreaView::test_anonymous_is_redirected_to_login PASSED
+label_studio/users/tests/test_admin_view.py::TestAdminAreaView::test_non_admin_gets_the_empty_shell_not_an_error PASSED
+label_studio/users/tests/test_admin_view.py::TestAdminAreaView::test_shell_breadcrumbs_target_admin PASSED
+label_studio/users/tests/test_admin_view.py::TestAdminAreaView::test_sub_paths_render_the_same_shell PASSED
+============================== 5 passed in 29.45s ==============================
+
+Regression — Wave-3 Django-admin + admin-permission tests still pass with the new URLs:
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_groups.py label_studio/users/tests/test_admin_permissions.py -q
+.................  [100%]
+17 passed in 46.04s
+(/admin/groups/usergroup/ etc. still resolve to django.contrib.admin: the new page URLs are
+ exact path() matches, so deep Django-admin paths are not shadowed.)
+
+PYTHON LINT:
+$ uvx ruff check + ruff format --check on views.py urls.py tests/test_admin_view.py
+All checks passed! / 3 files already formatted
+
+================================================================================
+MANUAL QA — REAL BROWSER (Playwright Chromium 1228, headless, real Django + vite HMR bundle)
+================================================================================
+Stack: vite dev server :8010 (bun run dev) + Django :8123
+       (FRONTEND_HMR=true, DJANGO_DB=sqlite; :8080/:8090 were occupied by an sslh forwarder and
+       jupyter, so an isolated port was used — the main checkout was NOT touched).
+QA users created via manage.py shell (qa_admin@example.com is_admin=True, qa_member@example.com
+plain member, org + OrganizationMember rows), then REMOVED afterwards (verified 0 users/0 orgs).
+
+Server-level anonymous gate (curl, real server):
+  anon /admin/        -> 302 http://localhost:8123/user/login/?next=/admin/
+  anon /admin/users/  -> 302 http://localhost:8123/user/login/?next=/admin/users/
+  anon /admin/groups/ -> 302 http://localhost:8123/user/login/?next=/admin/groups/
+
+Browser flight (node qa-admin.cjs, all 7 checks PASS on final run):
+  PASS admin: login lands on home — http://localhost:8123/
+  PASS admin: Menubar shows Admin entry                      (href="/admin", IconSettings icon)
+  PASS admin: /admin/ shell renders Users+Groups sidebar
+  PASS admin: breadcrumb shows Admin — "Admin"
+  PASS admin: /admin/users/ serves shell without 404 — http://localhost:8123/admin/users/
+  PASS member: Menubar hides Admin entry — count=0
+  PASS member: /admin/ redirects to / with no shell flash — http://localhost:8123/
+
+Screenshots (same directory as this file):
+  task-11-menubar-admin.png            hamburger sidebar open, Admin entry visible (admin session)
+  task-11-menubar-member.png           same menu WITHOUT Admin entry (member session)
+  task-11-admin-shell-admin-session.png  /admin/ shell: breadcrumb "Admin", Users/Groups sidebar,
+                                         empty content area (expected until T12/T13 mount pages)
+  task-11-admin-users-admin-session.png  /admin/users/ deep link renders the gated shell
+  task-11-admin-redirect-member.png    member after visiting /admin/: home page, no admin UI
+
+Visual inspection of captures: no overlap, no unstyled flash; sidebar links plain by design
+(matches Organization page). Content area intentionally empty (T12/T13 fill it).
+
+================================================================================
+ADVERSARIAL REVIEW
+================================================================================
+misleading_success_output: REPLIED. First ls:unit run failed 2/47 (location shim) and was fixed
+  and re-run; first browser runs failed twice (login 500 missing OrganizationMember rows, wrong
+  .sidebar selector) — final outputs above are from passing runs on the final tree. The empty
+  /admin content area is reported as by-design (T12/T13), not as a finished page.
+stale_state: REPLIED. Final verification re-ran ls:unit after the last Menubar formatting edit;
+  pytest ran after all Python edits; regression suite (17 wave-3 tests) re-run after URL change.
+dirty_worktree: REPLIED. Worktree had pre-existing uncommitted T10 files (ApiConfig.js +1 test,
+  types/admin.ts) — left untouched, not mine, not committed (no commits made). Build artifacts
+  (sw.js, manifest.json, sw.js.map) restored/removed; final git status lists only T11 + T10 files.
+security: CHECKED. Non-admin cannot reach the shell: browser-verified redirect + no menu entry;
+  Django page is @login_required and carries no data (empty React shell); all admin data APIs
+  already enforce is_admin (waves 1-3, 17 regression tests green). Frontend gate is UX, not the
+  boundary — stated in the view docstring.
+accessibility: CHECKED. Menu.Item renders a NavLink with visible text label "Admin" (label prop
+  becomes link text); icon is decorative; SidebarMenu entries are plain text links; screenshots
+  confirm focusable, labeled links. No aria regressions in changed files.
+performance / data-integrity / concurrency: NOT APPLICABLE — static shell page, no queries in
+  admin_view beyond auth middleware, no data mutation, no shared state introduced.
+
+================================================================================
+KNOWN RISK (accepted per plan)
+================================================================================
+users/urls.py is included at root BEFORE path('admin/', admin.site.urls) in core/urls.py, so:
+  - /admin/            -> LS admin shell (Django admin index page is shadowed)
+  - /admin/users/      -> LS shell (shadows Django admin's "users" app index)
+  - /admin/groups/     -> LS shell (shadows Django admin's "groups" app index)
+  - /admin/login/, /admin/users/user/, /admin/groups/usergroup/... -> still Django admin
+Staff can still sign in at /admin/login/ and reach every model changelist by full path; only
+the two index pages are shadowed. This is the path the plan mandates (/admin React route +
+admin/ URLs); flagged for the plan owner.
+
+Environment note: /root/.local/share/label-studio/label_studio.sqlite3 was a pre-existing EMPTY
+scratch DB (created 18:02 today, zero tables when first touched). QA run migrated its schema and
+added/removes QA rows (final state: 0 users, 0 orgs). Schema tables remain; file was not part of
+either checkout.

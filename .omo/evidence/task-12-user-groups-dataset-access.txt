@@ -1,0 +1,159 @@
+================================================================================
+T12 — Frontend: Admin Users page (list/create/edit/deactivate/delete/assign groups) + tests
+Branch: ulw/user-groups-dataset-access-wave4 (worktree label-studio-wt/ugda-wave4)
+Date: 2026-11-17
+================================================================================
+
+FILES CHANGED (scope per task):
+  A  web/apps/labelstudio/src/pages/Admin/UsersPage.jsx           (new page, path=/users under /admin layout)
+  A  web/apps/labelstudio/src/pages/Admin/UsersPage.test.jsx      (67-test suite with this + AdminPage.test.jsx)
+  M  web/apps/labelstudio/src/pages/Admin/AdminPage.jsx           (pages: { UsersPage } registration + import)
+  M  web/apps/labelstudio/src/pages/Admin/index.js                (export { UsersPage })
+  NOT touched: GroupsPage (T13 owns it), ApiConfig.js (T10 endpoints used as-is),
+  main checkout /root/workspace/projetos/label-studio (read-only for code; only .omo/evidence written).
+
+IMPLEMENTATION NOTES
+  - Endpoints used (all from T10 ApiConfig): adminUsers (GET list), createAdminUser (POST),
+    updateAdminUser (PATCH; edit fields + is_active toggle + is_admin), deleteAdminUser (DELETE),
+    adminUserGroups (GET current membership when opening the assign modal),
+    updateAdminUserGroups (PUT selection), plus adminGroups (GET org groups for the checkbox list).
+  - Table: DataTable from @humansignal/ui (repo ds lint rule `ds/raw-control` forbids raw <table>;
+    explicit column sizes set after a browser pass caught 150px-default overflow).
+    Columns: Email, Name, Groups, Status (Active/Inactive Badge), Role (Admin Badge / Member),
+    Last Activity, row actions (Dropdown.Trigger + Menu contextual).
+  - Create/edit/assign modals: ModalWindow (@humansignal/ui, renders in the owner's React tree so
+    the app ApiContext reaches the body); delete uses ConfirmDialog (DangerZone-style confirmation).
+    Form inputs use the app Form Input; errors render as Message variant="negative" inline.
+  - Owner protection: the T10 API does not expose an owner flag, so the client disables Delete for
+    the lowest-id is_admin user (the owner is the first admin created in the org) and for yourself;
+    the authoritative guard remains server-side (403 "The organization owner cannot be deleted" /
+    "You cannot delete yourself"), and the failure message is surfaced verbatim if ever reached.
+  - Error handling: mutations run with suppressError so the page owns the failure surface
+    (validation_errors > detail > field strings > status name); the list load uses the global
+    handler plus an inline "Could not load users." + Retry state. No crash paths: every callApi
+    result is null/array-guarded.
+  - Non-admin gate: AdminLayout (T11) redirects; UsersPage assumes admin context (asserted in tests).
+
+================================================================================
+UNIT TESTS — real output
+================================================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave4/web && bun run ls:unit src/pages/Admin
+bun test v1.3.14 (0d9b296a)
+
+ 67 pass
+ 0 fail
+ 131 expect() calls
+Ran 67 tests across 6 files. [3.07s]
+
+$ bun run ls:unit   (whole labelstudio app suite — regression check)
+ 67 pass / 0 fail / 6 files
+
+QA scenario mapping (plan's `-k` is a jest-ism; bun uses --test-name-pattern):
+$ bun test --dom apps/labelstudio/src src/pages/Admin --test-name-pattern "listing|create|edit|activate|delete|assign|admin-context"   # users.happy
+ 26 pass, 41 filtered out, 0 fail
+$ bun test --dom apps/labelstudio/src src/pages/Admin --test-name-pattern "fails|blocked|disabled|retryable|surfaces|falls back|cancelled|400"   # users.forbidden
+ 8 pass, 59 filtered out, 0 fail
+
+Test coverage (UsersPage.test.jsx):
+  list rows + badges + groups column + last activity; retryable load failure; page registration
+  (path /users); create happy + required-fields + API failure keeps modal + real LS 400
+  validation envelope; edit PATCH body scoping (no is_admin for owner/self); deactivate PATCH
+  is_active + failure banner; delete confirmation, cancel = no call, owner delete aria-disabled
+  and inert, self delete disabled, server failure stays in dialog; assign groups GET+PUT with
+  table refresh; fallback when the GET refresh fails; admin-context assumption.
+  Mocking: stateful fake callApi via ApiContext.Provider (mirrors real contract: success object,
+  204 -> {ok:true}, suppressed failure -> {error,...}); useAuth via module spyOn (T11 convention).
+
+================================================================================
+LINT
+================================================================================
+$ biome check apps/labelstudio/src/pages/Admin/
+Checked 5 files. No fixes applied. (0 errors, 0 warnings — after DataTable conversion)
+
+================================================================================
+BUILD
+================================================================================
+$ cd web && bun run build
+...
+dist/apps/labelstudio/static/js/sw.js 18.6kb
+[service-worker] precached 18 entries (~8883023 bytes manifest payload)
+build exit: 0
+
+Post-build artifact restore (worktree hygiene):
+$ git checkout -- label_studio/core/static/js/sw.js
+$ rm -f label_studio/core/static/js/manifest.json label_studio/core/static/js/sw.js.map
+Final `git status --short` lists ONLY wave files (T8/T10/T11 changes + this task's 4 files).
+
+================================================================================
+MANUAL QA — REAL BROWSER (Playwright Chromium 1228, headless, real Django + vite HMR bundle)
+================================================================================
+Stack: vite dev :8010 (`bun run dev`) + Django :8123 (FRONTEND_HMR=true, DJANGO_DB=sqlite,
+worktree .venv). Ports chosen as in T11 (8080/8090 occupied; main checkout untouched).
+QA data via manage.py shell (seed-t12.py): qa_owner (org owner, is_admin), qa_admin
+(is_admin, NOT owner — the session under test), qa_member, org "T12 QA Org",
+groups Annotators/Reviewers, qa_admin pre-assigned to Annotators.
+Script: /tmp/opencode/qa/qa-users-t12.cjs — final run on the final tree:
+
+  PASS list: owner, admin and member rows render with status badges
+  PASS list: three Active badges
+  PASS list: seeded admin already shows Annotators in the Groups column
+  PASS create: new user appears in the table
+  PASS deactivate: member row flips to Inactive
+  PASS assign groups: member row shows Reviewers after save
+  PASS delete: cancel keeps the user
+  PASS owner protection: Delete is aria-disabled for the organization owner — aria-disabled=true
+  PASS error handling: duplicate email surfaces the server message in the modal — "user with this email address already exists."
+  PASS delete: confirmed deletion removes the row
+  PASS activate: member flips back to Active
+  PASS gate: member visiting /admin/users/ is redirected home with no page render — http://localhost:8123/
+
+Server-side truth after the UI session (DB verification, guards misleading success):
+  member active: True (after UI re-activate)
+  member groups: ['Reviewers'] (PUT persisted)
+  qa_new exists: False (confirmed delete persisted)
+
+Screenshots (.omo/evidence/):
+  task-12-users-list.png            DataTable: 7 columns, badges, no overlap (after size fix)
+  task-12-user-created.png          new row + "User created" toast
+  task-12-member-deactivated.png    Inactive badge after PATCH
+  task-12-groups-assigned.png       assign modal (Reviewers checked, right-aligned footer)
+  task-12-delete-confirmation.png   ConfirmDialog with Cancel/Delete
+  task-12-owner-delete-blocked.png  row menu open, Delete dimmed + aria-disabled for owner
+  task-12-create-error.png          inline "user with this email address already exists." in modal
+  task-12-user-deleted.png          row gone after confirmed delete
+  task-12-member-redirect.png       non-admin bounced to / with no admin UI
+
+Visual inspection: first browser pass caught two real defects that were fixed and re-verified:
+  (1) raw-table->DataTable conversion overflowed 150px default columns (email/name collided) ->
+      explicit column sizes; (2) modal footers left-aligned + "Assign groups to —" title ->
+      flex justify-end footer + email fallback in name. Re-ran unit tests + full QA after each fix.
+
+================================================================================
+ADVERSARIAL REVIEW
+================================================================================
+misleading_success_output: REPLIED. All numbers above are pasted from the final runs on the final
+  tree. The browser QA found and fixed real defects (column overflow, footer alignment) instead of
+  shipping the first "green" pass; DB truth was re-queried after every UI mutation.
+stale_state: REPLIED. `bun run build` and `ls:unit` were re-run after the LAST edit (column sizes);
+  QA re-run against the same final tree; screenshots regenerated in the same pass.
+dirty_worktree: REPLIED. Build artifacts (sw.js restored, manifest.json/sw.js.map removed) after
+  every build; QA users/org/groups purged (users: 0, orgs: 0, groups: 0); vite+django processes
+  killed; final git status shows only wave files. Pre-existing T8/T10/T11 modifications left as-is.
+accessibility: CHECKED. Table via DataTable (header cells, row structure); every row trigger has
+  aria-label "Options for <email>"; disabled Delete uses aria-disabled=true + inert handler; modal
+  dialogs are labelled by title (Radix role=dialog); checkboxes carry accessible names; required
+  fields marked. Screenshots show focusable, labeled controls.
+error handling: CHECKED. Load failure -> inline Message + Retry (no crash, verified in unit +
+  browser); mutation failure -> server message surfaced inline (validation_errors/detail extracted,
+  e.g. duplicate email verified live against the 400 envelope); owner/self delete blocked client-side
+  and 403-guarded server-side; every callApi result null/type-guarded.
+
+KNOWN LIMITATION (documented in code):
+  Owner identification is a client-side heuristic (lowest id among is_admin users) because the T10
+  AdminUserSerializer exposes no owner flag and ApiConfig must not change in this task. The
+  authoritative block is the server (403 on owner delete / owner is_admin PATCH). If T13/T14 later
+  expose an `is_owner` field, the heuristic should be replaced with it.
+
+Environment note: sqlite DB /root/.local/share/label-studio/label_studio.sqlite3 is the shared
+  scratch DB (same as T11's QA). Schema tables remain; all QA rows were deleted (verified 0).
+================================================================================

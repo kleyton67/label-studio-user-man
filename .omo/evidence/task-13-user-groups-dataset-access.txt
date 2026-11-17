@@ -1,0 +1,209 @@
+# Task T13 — Admin Groups page (CRUD + members + dataset access) + tests
+# Branch: ulw/user-groups-dataset-access-wave4 (worktree /root/workspace/projetos/label-studio-wt/ugda-wave4)
+# Date: 2026-11-16 (session ran ~22:50 - 23:31 -03)
+# Plan row: - [ ] 13. Frontend: página Admin de Grupos (CRUD + membros + acesso a datasets) + testes
+
+================================================================================
+ARTIFACTS (changed files)
+================================================================================
+NEW  web/apps/labelstudio/src/pages/Admin/GroupsPage.jsx
+     path='/groups' (nested under AdminLayout path '/admin' -> served at /admin/groups,
+     same convention as UsersPage '/users' -> /admin/users).
+     Uses T10 endpoints: adminGroups, createAdminGroup, updateAdminGroup, deleteAdminGroup,
+     adminGroupMembers, addAdminGroupMember, deleteAdminGroupMember, adminGroupProjects,
+     addAdminGroupProject, deleteAdminGroupProject, adminUsers (member picker),
+     projects (org dataset list, paginated walk with page_size<=100).
+     Features: group list w/ auto-select; create/rename modal; delete ConfirmDialog;
+     members panel (list w/ Avatar, add via searchable org-user picker excluding current
+     members, remove); datasets panel (org projects with grant/revoke Checkbox,
+     server-truth state, disabled while a request is in flight).
+     Conventions: @humansignal/ui (Avatar, Badge, Button, Checkbox, ConfirmDialog,
+     Dropdown, Message, ModalWindow, Spinner, Typography, useToast), UsersPage's
+     mutate()/failureMessage()/mountedRef patterns, design-token classes only
+     (gap-base/p-tight/text-neutral-content-subtler/bg-primary-emphasis-subtle...).
+NEW  web/apps/labelstudio/src/pages/Admin/GroupsPage.test.jsx (21 tests)
+EDIT web/apps/labelstudio/src/pages/Admin/AdminPage.jsx (pages: { UsersPage, GroupsPage }; UsersPage registration kept)
+EDIT web/apps/labelstudio/src/pages/Admin/index.js (export { GroupsPage })
+NOT touched: UsersPage.jsx (verified md5 65314a71943ec043adbd20f38477b2ad / 619 lines,
+  mtime 22:47 predates this session - it is T12's artifact), ApiConfig.js, Menubar.jsx.
+
+================================================================================
+UNIT TESTS  (cd web && bun run ls:unit src/pages/Admin)
+================================================================================
+$ bun run ls:unit src/pages/Admin
+$ bun test --dom apps/labelstudio/src src/pages/Admin
+bun test v1.3.14 (0d9b296a)
+
+ 88 pass
+ 0 fail
+ 214 expect() calls
+Ran 88 tests across 7 files. [5.29s]
+
+(7 files = AdminPage.test.jsx, UsersPage.test.jsx, GroupsPage.test.jsx plus the other
+labelstudio src tests matched by the ls:unit pattern; re-run AFTER the final source
+edit (selected-card contrast fix). GroupsPage.test.jsx alone: 21 pass / 0 fail.
+Test iteration note: first run 36/47 pass; failures were (a) ambiguous
+findByText("Annotators") matching list row + detail header -> switched to testids,
+(b) QA-script-side timing on disabled picker button -> waitFor beEnabled helper.
+No source behavior changed by the fixes except the styling token.)
+
+GroupsPage.test.jsx coverage (all against a stateful fake of callApi mirroring the
+real contract: success->object, 204->{ok:true}, suppressError failure->{error},
+no-suppressError failure->null):
+  listing: renders + auto-selects first group, member/dataset panels reflect server;
+    group swap; empty state; retryable load error; path/title registration.
+  create: modal -> createAdminGroup body {name, description}; new row appears and is
+    selected; name required (no call); server error keeps modal open w/ message.
+  rename: prefilled modal -> updateAdminGroup {pk, body}; list reflects new name.
+  delete: ConfirmDialog; unselected delete keeps selection; selected delete clears
+    panel to placeholder; failed delete keeps dialog + server message.
+  members: picker excludes existing members; search filter; add ->
+    addAdminGroupMember {pk, body:{user}}; cross-org user 400 validation_errors
+    surfaced in picker, dialog stays open, list unchanged; remove ->
+    deleteAdminGroupMember {pk, userPk}; member-list load failure inline.
+  datasets: grant -> addAdminGroupProject {pk, body:{project}}, checkbox becomes
+    checked; revoke -> deleteAdminGroupProject {pk, projectPk}; cross-org project
+    400 surfaced + checkbox stays UNCHECKED (no stale state, grants unchanged);
+    in-flight grant keeps checkbox disabled+unchecked until server confirms
+    (misleading-success guard).
+
+================================================================================
+BUILD  (cd web && bun run build)
+================================================================================
+$ bun run build
+$ bun --bun run vite build && bun ./tools/build-service-worker.mjs
+...
+dist/apps/labelstudio/main-7Il7FSca.js   2,219.84 kB │ gzip: 719.32 kB
+✓ built in 25.79s   (first run, pre-style-fix)
+...
+  dist/apps/labelstudio/static/js/sw.js       18.6kb
+  dist/apps/labelstudio/static/js/sw.js.map  147.9kb
+⚡ Done in 13ms
+[service-worker] precached 18 entries (~8897140 bytes manifest payload)   (first run)
+[service-worker] precached 18 entries (~8897154 bytes manifest payload)   (final run after
+                                                              the GroupsPage style fix)
+Build green both times; final build ran on the final tree.
+
+Static-file restore after build:
+  cp /tmp/opencode/t13/sw.js.pre label_studio/core/static/js/sw.js
+  md5sum -> 8df2dd887d82956bb01d28a0b051edf5 (byte-identical to turn-start content)
+  manifest.json / sw.js.map: untracked build artifacts that already existed at
+  turn start; regenerated in place by the build, left as untracked (same git shape).
+Final `git status --short` shows exactly the pre-existing wave modifications
+(sw.js, users/urls.py, users/views.py, Menubar.jsx, ApiConfig.js, pages/index.js)
+and pre-existing untracked files — no new residue from this task.
+
+================================================================================
+MANUAL QA — REAL BROWSER (Playwright Chromium 1228, headless, real Django + vite HMR)
+================================================================================
+Stack: vite dev :8010 (`bun run dev` from worktree web/) + Django :50090
+(FRONTEND_HMR=true, DJANGO_DB=sqlite, worktree .venv, runserver --noreload).
+:8080 occupied by sslh as in T11/T12; main checkout never served.
+Seed (manage.py shell, /tmp/opencode/qa/seed-t13.py): qa_owner (is_admin),
+qa_admin (is_admin, session under test), qa_member (plain), org "T13 QA Org" with
+projects "Signals QA"/"Support Tickets"; second org "T13 Other Org" with project
+"Private Other Org" (cross-org probe); zero groups (created through the UI).
+Script: /tmp/opencode/qa/qa-groups-t13.cjs — final run on the final tree (exit=0):
+
+  PASS gate: member visiting /admin/groups/ is redirected home with no page render — http://localhost:50090/
+  PASS baseline: member sees zero datasets before any grant — []
+  PASS list: empty state shown for an org without groups
+  PASS create: new group appears in the list and is selected
+  PASS create: detail panel opens for the new group
+  PASS datasets: lists the org projects only — cross-org project absent —  Support Tickets Signals QA
+  PASS picker: search narrows candidates to the member
+  PASS members: added member renders in the list — QAqa_member@example.com...Remove
+  PASS picker: existing member is not offered again
+  PASS datasets: checkbox reflects the grant immediately
+  PASS server truth: grant persisted via API — [{"id":5,"group":12,"project":1,"project_title":"Signals QA",...}]
+  PASS enforcement: member's /api/projects/ includes the granted dataset — ["Signals QA"]
+  PASS rename: list reflects the new name
+  PASS error handling: duplicate group name surfaces the server error, modal stays open, no second row — UNIQUE constraint failed: user_group.organization_id, user_group.name
+  PASS enforcement: revoking removes the dataset from the member's /api/projects/ — []
+  PASS members: removal reflected immediately
+  PASS delete: confirmed deletion empties the list and clears the panel
+  PASS accessibility: name input is inside an implicit <label>
+  PASS accessibility: group list container exposes an aria-label — Groups
+  PASS accessibility: detail panel sections are labelled — 2
+  PASS cleanup: probe group deleted, org back to empty
+
+Key end-to-end proof (closes IS-2/IS-3): granting "Signals QA" to the group through
+the UI made the plain member's GET /api/projects/ return ["Signals QA"] (and only it);
+revoking removed it — verified with the member's own session cookie, server-side.
+
+Visual inspection found TWO issues that were fixed and re-verified:
+  (1) selected group card used bg-primary-surface + dark text (illegible subtitle on
+      strong blue) -> switched to the app's active-state convention
+      bg-primary-emphasis-subtle / hover:bg-neutral-emphasis-subtle (matches
+      SidebarMenu active item); re-ran unit tests + full QA after the fix (HMR
+      logged the update; screenshots regenerated).
+  (2) "orange squares" in the first screenshots were the Spinner caught mid-load —
+      QA script now waits for panels to settle before capture (script-side fix).
+
+Screenshots (.omo/evidence/):
+  task-13-groups-empty.png        empty org state + placeholder
+  task-13-group-created.png       selected card (fixed contrast), Members + Datasets panels
+  task-13-member-picker.png       searchable user picker (existing member excluded)
+  task-13-member-added.png        member row with avatar + Remove
+  task-13-dataset-granted.png     checked grant + toast
+  task-13-duplicate-error.png     inline server error in create modal (no duplicate row)
+  task-13-delete-confirmation.png ConfirmDialog Cancel/Delete
+  task-13-group-deleted.png       list + panel cleared
+  task-13-member-redirect.png     non-admin bounced from /admin/groups to /
+
+================================================================================
+CLEANUP
+================================================================================
+- QA data purged from the sqlite DB: qa_* users 0, T13 orgs 0, T13 projects 0,
+  UserGroup/Member/ProjectLink rows 0 (final counts verified via shell).
+- vite + Django processes killed; `ss -tlnp` shows :8010/:50090 clear; vite log
+  records exit 143. Temp LS_DIR removed. No commits made.
+- Build artifacts: tracked sw.js restored byte-identical; untracked manifest.json/
+  sw.js.map left in the same pre-existing untracked state as turn start.
+
+================================================================================
+ADVERSARIAL REVIEW
+================================================================================
+misleading_success_output: REPLIED. QA numbers pasted from the final run (exit=0);
+  server truth re-queried via API after UI mutations (grant persisted; member's
+  /api/projects/ changed); checkbox has NO optimistic flip — unit test proves it
+  stays disabled+unchecked while the grant is in flight and only reflects the
+  server response.
+stale_state: REPLIED. Unit tests, full QA and build all re-run after the LAST source
+  edit (contrast fix); selectedIdRef guards detail loads against group-switch races;
+  failed grant triggers a re-read (loadGroupProjects) so a rejected toggle can never
+  leave a checked box.
+dirty_worktree: REPLIED. Final git status identical to turn start (same 6 modified +
+  7 untracked entries); sw.js byte-restored; QA users/orgs/projects/groups purged;
+  servers killed; nothing committed.
+accessibility: REPLIED. Implicit <label> on form inputs (app convention), aria-label
+  on group list / datasets list / member options buttons ("Options for <name>"),
+  labelled <section>s, aria-current on the selected row, native checkbox semantics.
+  Verified in-browser. One deliberate limitation: the group list uses buttons +
+  aria-current rather than a full listbox/option pattern.
+error handling: REPLIED. Cross-org user and cross-org project rejections (backend
+  400 validation_errors) surfaced inline with the DRF message, unit-tested;
+  duplicate-name IntegrityError surfaces too — NOTE: the backend returns a raw
+  500 "UNIQUE constraint failed..." for duplicate names because DRF's
+  UniqueTogetherValidator is skipped (organization is read-only in
+  UserGroupSerializer). The UI handles it honestly (modal stays open, message shown,
+  no fake success) but the message is ugly. Fix belongs to T10's serializer
+  (out of T13 scope: ApiConfig/backend untouched).
+
+================================================================================
+COMMAND LOG (condensed, real outputs above)
+================================================================================
+1. bun test --dom apps/labelstudio/src/pages/Admin            -> 36 pass / 11 fail (first iteration)
+2. (fix ambiguous queries + timing in tests)
+3. bun test --dom apps/labelstudio/src/pages/Admin            -> 47 pass / 0 fail
+4. bun run ls:unit src/pages/Admin                            -> 88 pass / 0 fail (214 expects, 7 files)
+5. bun run build                                              -> ✓ built in 25.79s
+6. md5 snapshot static/; cp sw.js backup
+7. vite dev :8010 + Django :50090 (FRONTEND_HMR, sqlite) + migrate + seed-t13.py
+8. node qa-groups-t13.cjs (run 1)                             -> 16/19 (assertion bugs + backend 500 text)
+9. (QA script fixes; contrast fix in GroupsPage.jsx; probe-group self-cleanup added)
+10. bun run ls:unit src/pages/Admin                           -> 88 pass / 0 fail (after final source edit)
+11. node qa-groups-t13.cjs (final)                            -> 21/21 PASS, exit=0
+12. bun run build (final tree)                                -> ✓ built; service worker precached 18 entries
+13. restore sw.js (md5 8df2dd887d82956bb01d28a0b051edf5 == turn start)
+14. purge QA data; kill servers; verify ports clear; git status == turn start

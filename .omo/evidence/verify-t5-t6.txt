@@ -1,0 +1,302 @@
+================================================================================
+ADVERSARIAL VERIFICATION: T5 (dataset route enforcement) + T6 (storage route enforcement)
+================================================================================
+Date:        2026-11-16
+Verifier:    Independent adversarial verifier (fresh context)
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave2
+Branch:      ulw/user-groups-dataset-access-wave1 (Wave 1 + uncommitted T4/T5/T6)
+Base commit: a733aeeeb (merge: wave 1)
+
+Main checkout /root/workspace/projetos/label-studio was NOT edited.
+
+================================================================================
+T5 - DATASET ROUTE ENFORCEMENT
+================================================================================
+
+{
+  "verdict": "needs-fix",
+  "failure_class": "product",
+  "evidence": {
+    "tests_pass": {
+      "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave2 && DJANGO_DB=sqlite uv run pytest label_studio/projects/tests/test_route_access.py -vv",
+      "result": "17 passed in 38.00s",
+      "coverage": [
+        "ProjectAPI: member granted A can access A (200), cannot access B (404)",
+        "ProjectAPI: no-group member denied both A and B (404)",
+        "ProjectAPI: admin/owner can access both A and B (200)",
+        "ProjectTaskListAPI: member granted A can list tasks in A (200), cannot list in B (404)",
+        "TaskAPI: member granted A can access task in A (200), cannot access task in B (404)",
+        "TaskAPI: no-group member denied all tasks (404)",
+        "AnnotationAPI: member granted A can access annotation in A (200), cannot access in B (404)",
+        "AnnotationsListAPI: member granted A can list annotations in A (200), cannot list in B (404)",
+        "ImportAPI: member cannot import to non-granted project B (404)",
+        "ExportAPI: member cannot export from non-granted project B (404), can export from granted A (200)"
+      ]
+    },
+    "real_qa": {
+      "setup": "Scratch DB /tmp/opencode/verify-t5.sqlite3, seeded org+owner+admin(is_admin=True)+member1(group granted project A)+member2(no group)+projects A,B",
+      "commands_and_results": [
+        {
+          "user": "member1 (group access to A)",
+          "tests": [
+            "GET /api/projects/1/ (A): 200 ✓",
+            "GET /api/projects/2/ (B): 404 ✓",
+            "GET /api/projects/2/tasks/: 404 ✓",
+            "GET /api/projects/: 200, count=1 (only A) ✓"
+          ]
+        },
+        {
+          "user": "member2 (no group)",
+          "tests": [
+            "GET /api/projects/: 200, count=0 ✓",
+            "GET /api/projects/1/ (A): 404 ✓",
+            "GET /api/projects/2/ (B): 404 ✓"
+          ]
+        },
+        {
+          "user": "admin (is_admin=True)",
+          "tests": [
+            "GET /api/projects/1/ (A): 200 ✓",
+            "GET /api/projects/2/ (B): 200 ✓",
+            "GET /api/projects/: 200, count=2 ✓"
+          ]
+        }
+      ],
+      "cleanup": "Scratch DB deleted, no server left running"
+    },
+    "pre_existing_failures_check": {
+      "base_commit": "a733aeeeb",
+      "base_test_run": "DJANGO_DB=sqlite uv run pytest label_studio/tasks/tests label_studio/data_manager/tests",
+      "base_result": "7 failed, 344 passed (datetime formatting failures)",
+      "wave2_test_run": "same selection",
+      "wave2_result": "9 failed, 360 passed",
+      "delta": "+2 failures caused by T5/T6",
+      "new_failures": [
+        "label_studio/tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI::test_own_skipped_annotation_converts_to_draft",
+        "label_studio/tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI::test_another_users_skip_converts_to_a_draft_for_the_caller"
+      ],
+      "root_cause": "Test creates annotator/other_annotator users but does NOT grant them group access to the project. With T5's restrictive access, they get 403. Test needs to be updated to grant group access (similar to data_manager/tests/test_api.py changes)."
+    },
+    "edited_test_scrutiny": {
+      "test_models.py": {
+        "change": "Renamed test_member_is_allowed -> test_member_without_group_is_rejected, changed assertion from True to False",
+        "justified": true,
+        "reason": "T4 made access restrictive. A plain member without group access should be rejected. This is the intended new behavior."
+      },
+      "data_manager/tests/test_api.py": {
+        "change": "Added group grants to TestProjectUsersOptionsAPI and TestProjectUsersColumnOptionsAPI",
+        "justified": true,
+        "reason": "Tests need users to have group access to the project so they can see it. Without the grants, the tests would fail with the new restrictive access. The grants are minimal and match the test's intent (testing user options/columns, not access control)."
+      },
+      "tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI": {
+        "change": "NOT UPDATED - still creates users without group access",
+        "justified": false,
+        "reason": "This is a regression. The test was not updated to grant group access, so it now fails with 403. This is NOT justified by the plan's restrictive semantics - the test is testing annotation conversion, not access control. The test should be updated to grant group access to the users."
+      }
+    }
+  },
+  "repro": {
+    "failing_test": "DJANGO_DB=sqlite uv run pytest label_studio/tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI::test_own_skipped_annotation_converts_to_draft -vv",
+    "expected": "201 (annotation converted to draft)",
+    "actual": "403 (permission denied)",
+    "fix": "Add group grants in setUpTestData: create a UserGroup, add annotator/other_annotator as members, grant the group access to cls.project"
+  },
+  "confidence": 0.98,
+  "adversarial_checks": {
+    "misleading_success_output": false,
+    "stale_state": false,
+    "dirty_worktree": false,
+    "security": "No cross-project/cross-org leaks detected. member1 cannot access project B's tasks/annotations/exports. member2 (no group) sees nothing. Admin sees all org projects.",
+    "performance": "accessible_projects() uses a single query with id__in subquery. No N+1 detected."
+  }
+}
+
+================================================================================
+T6 - STORAGE ROUTE ENFORCEMENT
+================================================================================
+
+{
+  "verdict": "confirmed",
+  "failure_class": "none",
+  "evidence": {
+    "tests_pass": {
+      "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave2 && DJANGO_DB=sqlite uv run pytest label_studio/io_storages/tests/test_route_access.py -vv",
+      "result": "25 passed in 41.70s",
+      "coverage": [
+        "ImportStorageListAPI: member with A cannot list B's storages (404), can list A's (200)",
+        "ImportStorageListAPI: no-group user denied all (404)",
+        "ImportStorageListAPI: admin can list all (200)",
+        "ExportStorageListAPI: member with A cannot list B's export storages (404)",
+        "ExportStorageListAPI: admin can list all (200)",
+        "ImportStorageDetailAPI: member with A cannot retrieve/update/delete B's storage (404)",
+        "ImportStorageDetailAPI: member with A can retrieve A's storage (200)",
+        "ImportStorageDetailAPI: admin can retrieve any (200)",
+        "ExportStorageDetailAPI: member with A cannot retrieve B's export storage (404)",
+        "ExportStorageDetailAPI: admin can retrieve any (200)",
+        "ImportStorageSyncAPI: member with A cannot sync B's storage (404), can sync A's (not 403/404)",
+        "ImportStorageSyncAPI: admin can sync any (not 403/404)",
+        "ExportStorageSyncAPI: member with A cannot sync B's export storage (404)",
+        "ExportStorageSyncAPI: admin can sync any (not 403/404)",
+        "TaskResolveStorageUri: member with A cannot resolve URI from task in B (404), can resolve from A (not 403)",
+        "TaskResolveStorageUri: admin can resolve from any (not 403)",
+        "ProjectResolveStorageUri: member with A cannot resolve URI from B (404), can resolve from A (not 403)",
+        "ProjectResolveStorageUri: admin can resolve from any (not 403)",
+        "CrossOrgAccess: member cannot access storage from other org (404)"
+      ]
+    },
+    "real_qa": {
+      "setup": "Reused scratch DB from T5 QA, created LocalFilesImportStorage on project B",
+      "commands_and_results": [
+        {
+          "user": "member1 (group access to A, NOT B)",
+          "tests": [
+            "GET /api/storages/localfiles/?project=2 (B): 404 ✓",
+            "GET /api/storages/localfiles/?project=1 (A): 200, empty list ✓"
+          ]
+        },
+        {
+          "user": "member2 (no group)",
+          "tests": [
+            "GET /api/storages/localfiles/?project=2 (B): 404 ✓"
+          ]
+        },
+        {
+          "user": "admin (is_admin=True)",
+          "tests": [
+            "GET /api/storages/localfiles/?project=2 (B): 200, count=1, storage[0].id=1 ✓"
+          ]
+        }
+      ],
+      "cleanup": "Scratch DB deleted"
+    },
+    "403_to_404_change": {
+      "plan_says": "mesmo 403/404 (same 403/404)",
+      "implementation": "Uses get_permitted_project() which calls get_object_or_404(Project.objects.for_user(user), pk=pk), returning 404 when user lacks access",
+      "security_analysis": "404 does NOT leak existence. An attacker cannot distinguish between 'project does not exist' and 'you do not have access'. This is acceptable and matches the plan.",
+      "justified": true
+    },
+    "edited_test_scrutiny": {
+      "no_existing_tests_modified": true,
+      "note": "T6 only added new test file io_storages/tests/test_route_access.py. No existing tests were modified."
+    }
+  },
+  "repro": {
+    "not_applicable": "All tests pass, no failures to reproduce"
+  },
+  "confidence": 0.99,
+  "adversarial_checks": {
+    "misleading_success_output": false,
+    "stale_state": false,
+    "dirty_worktree": false,
+    "security": "No cross-project/cross-org leaks. member1 cannot list/retrieve/update/delete/sync storages from project B. member2 (no group) denied all. Admin sees all org storages. Cross-org access denied (404).",
+    "performance": "get_permitted_project() uses Project.objects.for_user() which is a single query. No N+1 detected."
+  }
+}
+
+================================================================================
+SUMMARY
+================================================================================
+
+T5 (dataset route enforcement):
+  - Route access tests: 17/17 PASSED ✓
+  - Real QA (APIClient): ALL CHECKS PASSED ✓
+  - Pre-existing failures: 7 datetime failures on base (pre-existing)
+  - NEW FAILURES CAUSED BY T5: 2 tests in TestAnnotationConvertToDraftAPI
+  - Edited tests: test_models.py and data_manager/tests/test_api.py changes are JUSTIFIED
+  - tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI was NOT updated -> REGRESSION
+  - Verdict: needs-fix (must update TestAnnotationConvertToDraftAPI to grant group access)
+
+T6 (storage route enforcement):
+  - Route access tests: 25/25 PASSED ✓
+  - Real QA (APIClient): ALL CHECKS PASSED ✓
+  - 403->404 change: JUSTIFIED (does not leak existence, matches plan)
+  - No existing tests modified
+  - Verdict: confirmed
+
+OVERALL:
+  - T5: needs-fix (1 test regression)
+  - T6: confirmed
+  - Security: No cross-project/cross-org leaks
+  - Performance: No N+1 queries detected
+
+================================================================================
+EVIDENCE TAILS
+================================================================================
+
+T5 test_route_access.py (17 passed):
+  TestProjectAPIAccess::test_member_can_access_granted_project PASSED
+  TestProjectAPIAccess::test_member_cannot_access_non_granted_project PASSED
+  TestProjectAPIAccess::test_no_group_member_cannot_access_any_project PASSED
+  TestProjectAPIAccess::test_admin_can_access_any_project PASSED
+  TestProjectAPIAccess::test_owner_can_access_any_project PASSED
+  TestProjectTaskListAPIAccess::test_member_can_list_tasks_in_granted_project PASSED
+  TestProjectTaskListAPIAccess::test_member_cannot_list_tasks_in_non_granted_project PASSED
+  TestTaskAPIAccess::test_member_can_access_task_in_granted_project PASSED
+  TestTaskAPIAccess::test_member_cannot_access_task_in_non_granted_project PASSED
+  TestTaskAPIAccess::test_no_group_member_cannot_access_any_task PASSED
+  TestAnnotationAPIAccess::test_member_can_access_annotation_in_granted_project PASSED
+  TestAnnotationAPIAccess::test_member_cannot_access_annotation_in_non_granted_project PASSED
+  TestAnnotationsListAPIAccess::test_member_can_list_annotations_in_granted_project PASSED
+  TestAnnotationsListAPIAccess::test_member_cannot_list_annotations_in_non_granted_project PASSED
+  TestImportAPIAccess::test_member_cannot_import_to_non_granted_project PASSED
+  TestExportAPIAccess::test_member_cannot_export_from_non_granted_project PASSED
+  TestExportAPIAccess::test_member_can_export_from_granted_project PASSED
+
+T6 test_route_access.py (25 passed):
+  TestImportStorageListAPIAccess (4 tests) PASSED
+  TestExportStorageListAPIAccess (2 tests) PASSED
+  TestImportStorageDetailAPIAccess (5 tests) PASSED
+  TestExportStorageDetailAPIAccess (2 tests) PASSED
+  TestImportStorageSyncAPIAccess (3 tests) PASSED
+  TestExportStorageSyncAPIAccess (2 tests) PASSED
+  TestTaskResolveStorageUriAccess (3 tests) PASSED
+  TestProjectResolveStorageUriAccess (3 tests) PASSED
+  TestCrossOrgAccess (1 test) PASSED
+
+T5 REAL QA output:
+  === T5 REAL QA (APIClient) ===
+  --- member1 (group access to project A) ---
+  GET /api/projects/1/ (A): 200 (expect 200)
+  GET /api/projects/2/ (B): 404 (expect 403/404)
+  GET /api/projects/2/tasks/: 404 (expect 403/404)
+  GET /api/projects/: 200, count=1 (expect 1 project)
+  --- member2 (no group) ---
+  GET /api/projects/: 200, count=0 (expect 0 projects)
+  GET /api/projects/1/ (A): 404 (expect 403/404)
+  GET /api/projects/2/ (B): 404 (expect 403/404)
+  --- admin (is_admin=True) ---
+  GET /api/projects/1/ (A): 200 (expect 200)
+  GET /api/projects/2/ (B): 200 (expect 200)
+  GET /api/projects/: 200, count=2 (expect 2 projects)
+
+T6 REAL QA output:
+  === T6 REAL QA (correct URL) ===
+  --- member1 (group access to project A, NOT B) ---
+  GET /api/storages/localfiles/?project=2: 404 (expect 403/404)
+  GET /api/storages/localfiles/?project=1: 200 (expect 200, empty list)
+  --- member2 (no group) ---
+  GET /api/storages/localfiles/?project=2: 404 (expect 403/404)
+  --- admin (is_admin=True) ---
+  GET /api/storages/localfiles/?project=2: 200 (expect 200)
+    storages count: 1 (expect 1)
+    storage[0] id: 1 (expect 1)
+
+T5 REGRESSION (TestAnnotationConvertToDraftAPI):
+  FAILED label_studio/tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI::test_own_skipped_annotation_converts_to_draft
+  AssertionError: b'{"status_code":403,"detail":"You do not have permission to perform this action."}'
+  assert 403 == 201
+  
+  FAILED label_studio/tasks/tests/test_api.py::TestAnnotationConvertToDraftAPI::test_another_users_skip_converts_to_a_draft_for_the_caller
+  AssertionError: b'{"status_code":403,"detail":"You do not have permission to perform this action."}'
+  assert 403 == 201
+  
+  Root cause: Test creates annotator/other_annotator but does NOT grant them group access to the project.
+  With T5's restrictive access, they get 403.
+  
+  Base commit (a733aeeeb) test run: 7 failed (all datetime), 344 passed
+  Wave2 test run: 9 failed (7 datetime + 2 permission), 360 passed
+  Delta: +2 failures caused by T5
+
+================================================================================
+END OF VERIFICATION
+================================================================================

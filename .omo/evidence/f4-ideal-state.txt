@@ -1,0 +1,119 @@
+================================================================================
+F4 - IDEAL-STATE FIDELITY (IS-1..IS-8 + GAP-1..GAP-6)
+================================================================================
+Date:        2026-11-17
+Worktree:   /root/workspace/projetos/label-studio-wt/ugda-final
+Branch:     ulw/user-groups-dataset-access-wave5 (HEAD 6ca3a86bc)
+Plan:       /root/workspace/projetos/label-studio/.omo/plans/user-groups-dataset-access.md
+Mode:       READ-ONLY. No product file edited. Only this evidence file written
+            (under .omo/evidence/, main checkout).
+
+VERDICT: APPROVE - 8/8 IS rows delivered, 6/6 GAP rows closed.
+
+--------------------------------------------------------------------------------
+METHOD
+--------------------------------------------------------------------------------
+1. Read the delivered code 1:1 against the plan rows:
+   groups/models.py, groups/api.py, groups/serializers.py, groups/functions.py,
+   groups/urls.py, groups/migrations/0001+0002, groups/admin.py,
+   users/api.py (AdminUser* + AdminUserGroupsAPI), users/serializers.py
+   (BaseWhoAmIUserSerializer.is_admin), users/admin.py, users/views.py
+   (admin_view), users/urls.py, core/api_permissions.py (IsOrganizationAdmin),
+   core/permissions.py (users.manage + groups.* + is_org_admin),
+   projects/functions/access.py (accessible_projects / for_user / has_permission),
+   projects/models.py:112 (ProjectManager.for_user), projects/mixins.py:85,
+   projects/api.py:183, tasks/api.py, data_manager/api.py, data_import/api.py,
+   data_export/api.py, io_storages/api.py + functions.py + proxy_api.py +
+   react_code_proxy.py, web/pages/Admin/*, Menubar.jsx, ApiConfig.js,
+   web/libs/core/src/types/user.ts, docs/source/guide/admin.md.
+2. Re-ran the IS-proving tests in THIS worktree (not trusted from evidence alone):
+   - backend A: groups/tests + users/tests/test_admin_api.py +
+     users/tests/test_admin_groups.py + users/tests/test_admin_permissions.py +
+     projects/tests/test_access.py + tests/test_admin_groups_integration.py
+     => 102 passed in 115.09s
+   - backend B: projects/tests/test_route_access.py +
+     io_storages/tests/test_route_access.py => 42 passed in 54.74s
+   - frontend: cd web && bun run ls:unit src/pages/Admin
+     => 88 pass / 0 fail (214 expect() calls, 7 files)
+   - migration drift: manage.py makemigrations --check --dry-run
+     => "No changes detected"
+   Total backend rerun: 144 passed, 0 failed.
+3. Cross-checked the evidence files in .omo/evidence/ (task-1..task-16,
+   verify-t*) and the plan Success criteria table.
+
+--------------------------------------------------------------------------------
+PER-IS TABLE
+--------------------------------------------------------------------------------
+| IS | Delivering todo(s) | Proving evidence (delivered) | Verdict |
+| --- | --- | --- | --- |
+| IS-1 Admin lista/cria/edita/desativa/exclui contas em area admin in-app | T8, T9, T12 | Code: AdminUserListAPI/AdminUserDetailAPI (users/api.py:523-587), AdminUserGroupsAPI (:590-632), users/admin.py:232-244, UsersPage.jsx. Tests: users/tests/test_admin_api.py (21 tests, task-8), users/tests/test_admin_groups.py (9, task-9), UsersPage.test.jsx + browser QA (task-12: create/edit/deactivate/delete/assign-groups/owner-delete-blocked). Rerun: 102 passed. | APPROVE |
+| IS-2 Admin cria grupos, renomeia e adiciona/remove membros | T1, T7, T13 | Code: UserGroup model (groups/models.py), AdminGroupListAPI/DetailAPI/MemberList/MemberDetail (groups/api.py:26-81), GroupsPage.jsx. Tests: groups/tests/test_models.py, groups/tests/test_api.py TestAdminGroupCrud + TestAdminGroupMembers (task-7), GroupsPage.test.jsx (task-13). Rerun green. | APPROVE |
+| IS-3 Admin concede/revoga acesso a datasets (projetos) por grupo | T1, T7, T13 | Code: UserGroupProject model, AdminGroupProjectListAPI/DetailAPI (groups/api.py:84-112, org-validated), GroupsPage toggle (grant/revoke). Tests: groups/tests/test_api.py::TestAdminGroupProjects (grant/revoke/idempotent/cross-org 404), task-13 QA proves member /api/projects/ reflects grant then revoke. | APPROVE |
+| IS-4 Datasets visiveis = uniao dos projetos concedidos aos grupos, avaliado a cada request | T4, T14 | Code: accessible_projects() (projects/functions/access.py:43-63) walks UserGroupMember -> UserGroupProject (union), no caching; ProjectMixin.has_permission (:85-94) and ProjectManager.for_user (models.py:112-117) call it per request. Tests: projects/tests/test_access.py (21, incl. test_two_groups_union, non_admin_no_group_sees_nothing, soft_deleted, cross_org), tests/test_admin_groups_integration.py (11). Rerun: 102 passed. | APPROVE |
+| IS-5 Enforcement server-side em todas as rotas de dataset (projects, tasks, annotations, DM, storages, resolve, import/export) | T4, T5, T6, T14 | Code: projects/api.py:183,403,466,493,637,973; tasks/api.py:1010,1145,1258,1455 + object checks; data_manager/api.py:248,275,293,440,570,593,763,769,831; data_import/api.py:274,901; data_export/api.py:93,188,277,311,391,502,571; io_storages/api.py:54,101 + functions.py:25 + proxy_api.py:76 + react_code_proxy.py:178. Tests: projects/tests/test_route_access.py (17: projects/tasks/annotations/import/export, 403/404), io_storages/tests/test_route_access.py (25: list/detail/sync/resolve/cross-org), integration. Rerun: 42 passed. | APPROVE |
+| IS-6 Area admin e APIs admin inacessiveis a quem nao e admin (403/redirect) | T2, T7, T8, T11 | Code: IsOrganizationAdmin (core/api_permissions.py:17-21) on every /api/admin/* view; permissions users.manage/groups.* gated by is_org_admin (core/permissions.py:89-110); Menubar.jsx:242 `{user?.is_admin && ...}`; AdminPage.jsx gate redirects non-admin; admin_view @login_required. Tests: users/tests/test_admin_permissions.py (whoami is_admin + IsOrganizationAdmin), test_admin_api.py member 403, test_admin_view.py, AdminPage.test.jsx (redirect/no-flash). | APPROVE |
+| IS-7 Membros existentes permanecem funcionando apos a migracao (backfill de grupo padrao) | T3, T14 | Code: groups/migrations/0002_backfill_default_group.py -> groups/functions.py:backfill_default_groups (all active members + all projects, idempotent). Tests: groups/tests/test_migrations.py (5: 2 orgs, active vs soft-deleted, all projects linked, idempotent), integration. Rerun green. | APPROVE |
+| IS-8 Admin ve infos relacionadas (membros, grupos, projetos, atividade) na mesma area | T8, T9, T12, T13 | Code: UsersPage columns Email/Name/Groups/Status/Role/Last Activity (UsersPage.jsx:315-352); GroupsPage members + datasets panels; Django admin registers UserGroup/UserGroupMember/UserGroupProject (users/admin.py:211-244). Tests: users/tests/test_admin_groups.py, UsersPage.test.jsx, GroupsPage.test.jsx. | APPROVE |
+
+--------------------------------------------------------------------------------
+GAP TABLE (all closed)
+--------------------------------------------------------------------------------
+| GAP | Closed by | Proof | Verdict |
+| --- | --- | --- | --- |
+| GAP-1 Sem CRUD de usuarios fora do Django admin; sem UI de desativar/excluir | T8, T12 | AdminUser* API + UsersPage deactivate/delete | CLOSED |
+| GAP-2 Sem modelo/APIs/UI de grupos | T1, T7, T13 | groups app + AdminGroup* API + GroupsPage | CLOSED |
+| GAP-3 Sem concessao de dataset por grupo; acesso e org-wide | T7, T13, T3 | AdminGroupProject* API + GroupsPage toggle + backfill | CLOSED |
+| GAP-4 Sem area admin React (so Django admin) | T11 | pages/index.js registers AdminPage; Menubar entry; admin_view + template | CLOSED |
+| GAP-5 Frontend sem gate de admin; whoami.permissions retorna todas as permissoes | T2, T10, T11 | gate uses user.is_admin (not permissions.can); whoami exposes is_admin; APIUser.is_admin type | CLOSED |
+| GAP-6 accessible_projects so escopa por organizacao | T4 | projects/functions/access.py:43-63 scopes by group union | CLOSED |
+
+--------------------------------------------------------------------------------
+OBSERVATIONS (not IS/GAP shortfalls; verdict unchanged)
+--------------------------------------------------------------------------------
+1. Plan-named QA-scenario selectors do not exist verbatim in the delivered test
+   suite. The plan's Success criteria column names `-k cross_project`,
+   `-k non_admin`, `-k users.happy`, `-k groups.happy`, `-k denied`; the
+   delivered tests use different names. Behavior is proven by the equivalent
+   delivered tests actually rerun here:
+     - IS-5 cross-project denial: projects/tests/test_route_access.py
+       ::TestProjectAPIAccess::test_member_cannot_access_non_granted_project
+       (and TestTaskAPIAccess / TestAnnotationAPIAccess / TestImportAPIAccess /
+       TestExportAPIAccess "non_granted_project").
+     - IS-6 non-admin 403: users/tests/test_admin_permissions.py
+       ::test_is_organization_admin_denies_plain_member and
+       users/tests/test_admin_api.py::TestAdminUserForbidden
+       ::test_plain_member_is_denied_every_admin_endpoint.
+     - IS-1/IS-2/IS-3 frontend: UsersPage.test.jsx / GroupsPage.test.jsx /
+       AdminPage.test.jsx (88 bun tests, 0 fail).
+   This is a naming/plan-text mismatch only; no IS behavior is unproven.
+2. Guardrail deviation (plan T3 Must NOT, not an IS row): the plan says "nao
+   criar grupos para organizacoes sem dono", but groups/functions.py
+   backfill_default_groups creates an "All members" group for every
+   Organization, including one whose created_by is NULL (created_by is
+   SET_NULL, so ownerless orgs exist - organizations/models.py:72-73). The
+   group is created with created_by=None; access is preserved (arguably the
+   safe direction), and no test covers the ownerless case. Recommended row if
+   strict plan fidelity is wanted:
+     - [ ] 17. Backfill: pular Organization sem created_by (ownerless) em
+       groups/functions.py:backfill_default_groups, cobrindo com teste em
+       groups/tests/test_migrations.py. (Guardrail T3, nao IS/GAP.)
+3. Pre-existing unrelated failures reported by the task evidence (not caused by
+   this work, not part of IS fidelity): 5 in
+   users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase (fixed by T16 in
+   the final tree - rerun green here) and 5 datetime-filter tests in
+   data_manager/tests/test_managers.py::TestApplyFiltersDatetimeOnTaskData
+   (SQLite datetime handling; T16 evidence proves they fail on the base commit
+   ab1db2151 too). Not an IS shortfall.
+
+--------------------------------------------------------------------------------
+CONCLUSION
+--------------------------------------------------------------------------------
+Every IS-1..IS-8 row is delivered by the named todos and proven by the listed
+tests/evidence, and every GAP-1..GAP-6 row is closed. Code inspection confirms
+the enforcement points named in the plan (accessible_projects, for_user,
+ProjectMixin.has_permission, ProjectListAPI.get_queryset, /api/admin/*
+permissions, is_admin gate, backfill). Targeted reruns in the final worktree:
+144 backend tests passed, 88 frontend tests passed, migration drift clean.
+
+VERDICT: APPROVE
+================================================================================

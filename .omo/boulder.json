@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "active_work_id": null,
+  "works": {
+    "ugda-user-groups-dataset-access": {
+      "work_id": "ugda-user-groups-dataset-access",
+      "active_plan": ".omo/plans/user-groups-dataset-access.md",
+      "plan_name": "user-groups-dataset-access",
+      "session_ids": ["codex:ses_e1a3da631ffem9LHZe88WNqoon"],
+      "status": "completed",
+      "worktree_path": null,
+      "delivery_mode": "direct",
+      "integration_branch": "ulw/user-groups-dataset-access",
+      "head_commit": "371082d5d",
+      "completed_at": "2026-11-17T04:20:00Z"
+    }
+  }
+}

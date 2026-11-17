@@ -1,0 +1,369 @@
+================================================================================
+T4 - Restrictive group-based access layer (accessible_projects, for_user, has_permission)
+================================================================================
+Date:        2026-11-16
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave2
+Branch:      ulw/user-groups-dataset-access-wave2
+Plan row:    .omo/plans/user-groups-dataset-access.md  row "- [ ] 4."
+Main checkout /root/workspace/projetos/label-studio was NOT edited (only this
+evidence file was written under .omo/evidence/).
+
+--------------------------------------------------------------------------------
+1. DIRTY WORKTREE (adversarial class: dirty_worktree)
+--------------------------------------------------------------------------------
+git status --porcelain (before T4):
+  (clean - only Wave 1 commits present)
+
+git status --porcelain (after T4):
+ M label_studio/projects/api.py
+ M label_studio/projects/functions/access.py
+ M label_studio/projects/mixins.py
+ M label_studio/projects/models.py
+ M label_studio/projects/tests/test_models.py
+ M label_studio/data_manager/tests/test_api.py
+?? label_studio/projects/tests/test_access.py
+
+git diff --stat (T4 files only):
+ label_studio/projects/api.py                |  6 +++---
+ label_studio/projects/functions/access.py   | 55 ++++++++++++++++++++++++++++++++++++++++++++++---------
+ label_studio/projects/mixins.py             | 10 +++++++---
+ label_studio/projects/models.py             |  6 +++++-
+ label_studio/projects/tests/test_models.py  |  8 ++++----
+ label_studio/data_manager/tests/test_api.py | 30 ++++++++++++++++++++++++++++++
+ label_studio/projects/tests/test_access.py  | 21 new file (267 lines)
+
+Note: test_models.py and data_manager/tests/test_api.py were updated to reflect
+the new restrictive behavior (plain members without group access now see nothing,
+not all projects). This is a behavioral change from T4, not a bug.
+
+--------------------------------------------------------------------------------
+2. CHANGES
+--------------------------------------------------------------------------------
+- label_studio/projects/functions/access.py
+    + def is_admin_user(user) -> bool:
+          return bool(user.is_superuser or getattr(user, 'is_admin', False)
+              or (user.active_organization is not None
+                  and user.active_organization.created_by_id == user.id))
+    + def user_group_project_ids(user, organization_id) -> QuerySet:
+          Walks UserGroupMember (scoped to groups of that org) -> UserGroupProject.
+          Returns flat values_list for use in id__in.
+    * def accessible_projects(user) -> QuerySet:
+          Restrictive: org None or membership revoked -> Project.objects.none();
+          admin (owner/is_admin/superuser) -> all org projects;
+          else -> projects linked to user's groups via user_group_project_ids.
+    filter_accessible and get_permitted_project unchanged (they call accessible_projects).
+
+- label_studio/projects/models.py:112 (ProjectManager.for_user)
+    * def for_user(self, user):
+          from projects.functions.access import accessible_projects
+          return self.get_queryset().filter(pk__in=accessible_projects(user).values('pk'))
+    Import inside method to avoid circular import (access.py imports Project at module load).
+
+- label_studio/projects/mixins.py:85 (ProjectMixin.has_permission)
+    * def has_permission(self, user):
+          user.project = self
+          if self.organization_id is None: return True
+          from projects.functions.access import accessible_projects
+          return accessible_projects(user).filter(pk=self.pk).exists()
+    Restrictive: admin sees all org projects; non-admin sees only group-granted ones.
+
+- label_studio/projects/api.py:180 (ProjectListAPI.get_queryset)
+    * projects = accessible_projects(self.request.user).order_by(...)
+    Replaced Project.objects.filter(organization=...) with accessible_projects(user).
+
+- label_studio/projects/tests/test_access.py (new, 21 tests)
+    TestAccessibleProjects (8 tests):
+      - group_member_sees_granted_project_only
+      - two_groups_union
+      - non_admin_no_group_sees_nothing
+      - org_owner_sees_all_projects
+      - is_admin_flag_sees_all_projects
+      - soft_deleted_membership_sees_nothing
+      - no_active_organization_sees_nothing
+      - cross_org_project_not_included
+    TestHelpers (5 tests):
+      - is_admin_user_superuser
+      - is_admin_user_flag
+      - is_admin_user_org_owner
+      - is_admin_user_plain_member
+      - user_group_project_ids_returns_granted_ids
+    TestProjectHasPermission (3 tests):
+      - granted_project_returns_true
+      - non_granted_project_returns_false
+      - project_without_organization_returns_true
+    TestProjectListAPIAccess (3 tests):
+      - group_member_sees_only_granted_project
+      - no_group_user_sees_empty_list
+      - admin_sees_all_projects
+    TestProjectManagerForUser (2 tests):
+      - for_user_scopes_by_group_access
+      - for_user_empty_for_no_group
+
+- label_studio/projects/tests/test_models.py:129 (TestProjectHasPermission)
+    * Renamed test_member_is_allowed -> test_member_without_group_is_rejected
+    * Updated docstring to reflect restrictive behavior
+    * Changed assertion: plain member without group now sees nothing (was: sees all)
+
+- label_studio/data_manager/tests/test_api.py:289 (TestProjectUsersOptionsAPI)
+    + Added group setup in setUpTestData: create UserGroup, add first_member and
+      second_member, grant project access. This is required because T4 changed the
+      default behavior from "all org members see all projects" to "only group members
+      see granted projects".
+    * Updated test_default_page_size_and_last_page to also add extra_members to group.
+
+- label_studio/data_manager/tests/test_api.py:372 (TestProjectUsersColumnOptionsAPI)
+    + Added group setup in setUpTestData: create UserGroup, add annotator/updated_by/
+      annotation_updated_by/non_participant, grant project access.
+
+--------------------------------------------------------------------------------
+3. COMMANDS + REAL OUTPUTS
+--------------------------------------------------------------------------------
+=== 3a. new test file (21 tests) ============================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave2
+$ DJANGO_DB=sqlite uv run pytest label_studio/projects/tests/test_access.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave2
+collected 21 items
+
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_group_member_sees_granted_project_only PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_two_groups_union PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_non_admin_no_group_sees_nothing PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_org_owner_sees_all_projects PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_is_admin_flag_sees_all_projects PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_soft_deleted_membership_sees_nothing PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_no_active_organization_sees_nothing PASSED
+label_studio/projects/tests/test_access.py::TestAccessibleProjects::test_cross_org_project_not_included PASSED
+label_studio/projects/tests/test_access.py::TestHelpers::test_is_admin_user_superuser PASSED
+label_studio/projects/tests/test_access.py::TestHelpers::test_is_admin_user_flag PASSED
+label_studio/projects/tests/test_access.py::TestHelpers::test_is_admin_user_org_owner PASSED
+label_studio/projects/tests/test_access.py::TestHelpers::test_is_admin_user_plain_member PASSED
+label_studio/projects/tests/test_access.py::TestHelpers::test_user_group_project_ids_returns_granted_ids PASSED
+label_studio/projects/tests/test_access.py::TestProjectHasPermission::test_granted_project_returns_true PASSED
+label_studio/projects/tests/test_access.py::TestProjectHasPermission::test_non_granted_project_returns_false PASSED
+label_studio/projects/tests/test_access.py::TestProjectHasPermission::test_project_without_organization_returns_true PASSED
+label_studio/projects/tests/test_access.py::TestProjectListAPIAccess::test_group_member_sees_only_granted_project PASSED
+label_studio/projects/tests/test_access.py::TestProjectListAPIAccess::test_no_group_user_sees_empty_list PASSED
+label_studio/projects/tests/test_access.py::TestProjectListAPIAccess::test_admin_sees_all_projects PASSED
+label_studio/projects/tests/test_access.py::TestProjectManagerForUser::test_for_user_scopes_by_group_access PASSED
+label_studio/projects/tests/test_access.py::TestProjectManagerForUser::test_for_user_empty_for_no_group PASSED
+
+============================= 21 passed in 37.92s ==============================
+
+=== 3b. required pytest command (full suite) =================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave2
+$ DJANGO_DB=sqlite uv run pytest label_studio/projects/tests label_studio/data_manager/tests -vv
+[... output truncated for brevity ...]
+======== 5 failed, 374 passed, 217 subtests passed in 108.29s (0:01:48) ========
+
+The 5 failures are ALL pre-existing in TestApplyFiltersDatetimeOnTaskData
+(data_manager/tests/test_managers.py). Verified by stashing T4 changes and
+running the same tests - they still fail. These are datetime filter tests
+unrelated to T4 (they test SQLite datetime handling, not access control).
+
+T4-related tests: ALL PASS (21 new + 20 updated = 41 tests).
+
+=== 3c. manual QA (real HTTP surface, port 50080) ===========================
+Dedicated throwaway sqlite DB (dev DB untouched):
+  DATABASE_NAME=/tmp/opencode/t4-qa.sqlite3
+
+$ DATABASE_NAME=/tmp/opencode/t4-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py migrate
+  [... migrations applied ...]
+
+$ DATABASE_NAME=/tmp/opencode/t4-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "<seed owner/org/admin/member1/member2/projects/group>"
+OWNER_TOKEN=ff07fae6af201448e4f1dd2fd9005989b03e7930
+ADMIN_TOKEN=5e1cca4cdf4ae17845ab97d1114425e49f3e065a
+MEMBER1_TOKEN=13499ed18623f93dd2415c2cfea28e5ad3f095e8
+MEMBER2_TOKEN=6b33b715e076416ba41198371dd6975ab1ff9453
+PROJECT_A_ID=1
+PROJECT_B_ID=2
+
+$ DATABASE_NAME=/tmp/opencode/t4-qa.sqlite3 DJANGO_DB=sqlite LABEL_STUDIO_SKIP_UPDATE_CHECK=true \
+    nohup uv run python label_studio/manage.py runserver 50080 --noreload \
+    > /tmp/opencode/t4-server.log 2>&1 &
+$ echo $! > /tmp/opencode/t4-server.pid
+1644366
+
+readiness poll (unauthenticated whoami -> 401): ready after 8s
+
+--- member1 token (in DS group, granted Project A) ----------------------------
+$ curl -s http://127.0.0.1:50080/api/projects/ \
+      -H "Authorization: Token 13499ed18623f93dd2415c2cfea28e5ad3f095e8" \
+      | jq '{count: .count, results: [.results[] | {id, title}]}'
+{
+  "count": 1,
+  "results": [
+    {
+      "id": 1,
+      "title": "Project A"
+    }
+  ]
+}
+PASS: member1 sees only Project A (granted via DS group).
+
+--- member2 token (no group) --------------------------------------------------
+$ curl -s http://127.0.0.1:50080/api/projects/ \
+      -H "Authorization: Token 6b33b715e076416ba41198371dd6975ab1ff9453" \
+      | jq '{count: .count, results: [.results[] | {id, title}]}'
+{
+  "count": 0,
+  "results": []
+}
+PASS: member2 sees empty list (no group = no access).
+
+--- admin token (is_admin=True) -----------------------------------------------
+$ curl -s http://127.0.0.1:50080/api/projects/ \
+      -H "Authorization: Token 5e1cca4cdf4ae17845ab97d1114425e49f3e065a" \
+      | jq '{count: .count, results: [.results[] | {id, title}]}'
+{
+  "count": 2,
+  "results": [
+    {
+      "id": 2,
+      "title": "Project B"
+    },
+    {
+      "id": 1,
+      "title": "Project A"
+    }
+  ]
+}
+PASS: admin sees both projects (is_admin=True).
+
+--- owner token (org owner) ---------------------------------------------------
+$ curl -s http://127.0.0.1:50080/api/projects/ \
+      -H "Authorization: Token ff07fae6af201448e4f1dd2fd9005989b03e7930" \
+      | jq '{count: .count, results: [.results[] | {id, title}]}'
+{
+  "count": 2,
+  "results": [
+    {
+      "id": 2,
+      "title": "Project B"
+    },
+    {
+      "id": 1,
+      "title": "Project A"
+    }
+  ]
+}
+PASS: owner sees both projects (organization.created_by_id == user.id).
+
+--- teardown ------------------------------------------------------------------
+$ kill $(cat /tmp/opencode/t4-server.pid); sleep 2
+$ ps aux | grep "manage.py runserver 50080" | grep -v grep || echo "Server killed"
+Server killed
+$ rm -f /tmp/opencode/t4-qa.sqlite3 /tmp/opencode/t4-server.log /tmp/opencode/t4-server.pid
+Server killed; PID 1644366 (uv) + child 1644370 (python) gone; port 50080 closed.
+Throwaway DB removed.
+
+--------------------------------------------------------------------------------
+4. ADVERSARIAL CLASSES
+--------------------------------------------------------------------------------
+- stale_state: PASS. The pytest output above is the real tail of the actual run
+  ("5 failed, 374 passed, 217 subtests passed in 108.29s"). The 5 failures are
+  pre-existing datetime filter tests (verified by stashing T4 and re-running).
+  The curl JSON was produced by the live server against a DB that had the seeded
+  data; member1 -> 1 project, member2 -> 0, admin/owner -> 2. No output fabricated.
+
+- misleading_success_output: PASS. The pytest summary is the real tail. The curl
+  output is the real response from the live server. All assertions match the
+  actual data.
+
+- dirty_worktree: PASS. git status above shows T4 touched only the 4 in-scope
+  implementation files + 1 new test file + 2 test files that needed updates to
+  reflect the new restrictive behavior. No files outside SCOPE were edited
+  (test_models.py and data_manager/tests/test_api.py are test files that test
+  the OLD behavior and needed updating).
+
+- security: PASS. Cross-org project denied (test_cross_org_project_not_included).
+  Non-granted project denied (test_non_granted_project_returns_false, member2
+  curl returns empty list). No-group user denied (test_non_admin_no_group_sees_nothing,
+  member2 curl returns empty list). Soft-deleted membership denied
+  (test_soft_deleted_membership_sees_nothing). Admin/owner bypass works correctly
+  (test_org_owner_sees_all_projects, test_is_admin_flag_sees_all_projects, admin/owner
+  curl returns both projects).
+
+- performance: PASS. accessible_projects uses a single query with id__in subquery
+  (user_group_project_ids returns a values_list). No N+1 explosion. ProjectListAPI
+  calls accessible_projects once per request. for_user wraps it in pk__in (one
+  additional subquery layer, but still O(1) queries per request). has_permission
+  calls accessible_projects(user).filter(pk=self.pk).exists() - one query with
+  LIMIT 1.
+
+- others: N/A. No prompt-injection surface, no secrets committed, no network calls
+  beyond the local runserver; nothing else in the class list applies to an access
+  control layer.
+
+--------------------------------------------------------------------------------
+5. RISKS
+--------------------------------------------------------------------------------
+- Behavioral change: T4 changes the default from "all org members see all projects"
+  to "only group members see granted projects". This is the INTENDED restrictive
+  behavior (IS-4, IS-5). Existing tests that assumed the old behavior were updated
+  (test_models.py, data_manager/tests/test_api.py). Any production deployment must
+  run the T3 backfill migration first to create default groups with all members
+  and projects, otherwise users will lose access.
+
+- Circular import avoided: ProjectManager.for_user imports accessible_projects
+  inside the method (not at module load) because access.py imports Project at
+  module load. This is documented in the code comment.
+
+- organization is None case preserved: has_permission returns True if
+  organization_id is None (legacy rows, tests). accessible_projects returns
+  Project.objects.none() if user.active_organization is None. Both behaviors
+  are tested.
+
+- Admin bypass: is_admin_user checks superuser, is_admin flag, and org owner.
+  All three paths are tested. Admins see all org projects regardless of group
+  membership.
+
+- Soft-delete respected: accessible_projects checks organization.has_deleted(user)
+  and returns Project.objects.none() if true. Tested.
+
+--------------------------------------------------------------------------------
+6. CLEANUP
+--------------------------------------------------------------------------------
+- runserver killed; port 50080 closed (verified).
+- Throwaway DB /tmp/opencode/t4-qa.sqlite3 removed after QA.
+- /tmp/opencode/t4-*.log, t4-server.pid removed after evidence capture.
+- No commit, no push. Dev sqlite DB untouched (QA used a dedicated DATABASE_NAME).
+
+================================================================================
+DONE CLAIM
+================================================================================
+{
+  "changed_files": [
+    "label_studio/projects/functions/access.py",
+    "label_studio/projects/models.py",
+    "label_studio/projects/mixins.py",
+    "label_studio/projects/api.py",
+    "label_studio/projects/tests/test_access.py",
+    "label_studio/projects/tests/test_models.py",
+    "label_studio/data_manager/tests/test_api.py"
+  ],
+  "tests": {
+    "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave2 && DJANGO_DB=sqlite uv run pytest label_studio/projects/tests label_studio/data_manager/tests -vv",
+    "result": "5 failed, 374 passed, 217 subtests passed in 108.29s (0:01:48). The 5 failures are pre-existing in TestApplyFiltersDatetimeOnTaskData (datetime filter tests unrelated to T4, verified by stashing T4 and re-running). All T4-related tests pass (21 new + 20 updated = 41 tests)."
+  },
+  "manual_qa": {
+    "artifact_path": "/root/workspace/projetos/label-studio/.omo/evidence/task-4-user-groups-dataset-access.txt",
+    "summary": "Real HTTP server on port 50080 with throwaway sqlite DB. Seeded org+owner+admin(is_admin=True)+member1(in DS group granted Project A)+member2(no group)+projects A,B. curl /api/projects/ with member1 token -> 1 project (A). member2 token -> 0 projects. admin token -> 2 projects. owner token -> 2 projects. All assertions match expected restrictive behavior."
+  },
+  "cleanup": {
+    "server_killed": true,
+    "scratch_db_removed": true,
+    "no_commit_no_push": true
+  },
+  "risks": [
+    "Behavioral change: default access is now restrictive (group-based). T3 backfill migration must run first in production to create default groups with all members and projects.",
+    "Circular import avoided by importing accessible_projects inside ProjectManager.for_user method (not at module load).",
+    "organization is None case preserved (has_permission returns True, accessible_projects returns none).",
+    "Admin bypass works for superuser, is_admin flag, and org owner (all three tested).",
+    "Soft-delete respected (accessible_projects checks organization.has_deleted(user))."
+  ]
+}
+================================================================================

@@ -1,0 +1,177 @@
+=== T9 evidence: register group models + User.is_admin in Django admin ===
+Date: 2026-11-16T20:27:14-03:00
+Worktree: /root/workspace/projetos/label-studio-wt/ugda-wave3
+Branch: ulw/user-groups-dataset-access-wave3
+
+--- git status (before) ---
+ M label_studio/core/urls.py
+ M label_studio/groups/api.py
+ M label_studio/groups/serializers.py
+ M label_studio/groups/urls.py
+ M label_studio/users/admin.py
+ M label_studio/users/api.py
+ M label_studio/users/urls.py
+?? label_studio/groups/tests/test_api.py
+?? label_studio/users/tests/test_admin_api.py
+?? label_studio/users/tests/test_admin_groups.py
+
+--- COMMAND 1: pytest (required) ---
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_groups.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /root/workspace/projetos/label-studio-wt/ugda-wave3/.venv/bin/python
+cachedir: .pytest_cache
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave3
+configfile: pyproject.toml
+plugins: xdist-3.8.0, anyio-4.14.2, requests-mock-1.12.1, env-1.6.0, cov-7.1.0, django-4.12.0, tavern-3.3.3, Faker-40.8.0, mock-3.15.1
+collecting ... collected 9 items
+
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_django_auth_group_stays_unregistered PASSED [ 11%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_is_admin_in_user_admin_short_display_filter_and_fieldsets PASSED [ 22%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_member_registered PASSED [ 33%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_project_registered PASSED [ 44%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_registered PASSED [ 55%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_admin_pages_denied_for_non_staff PASSED [ 66%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroup_changelist_as_superuser PASSED [ 77%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroupmember_changelist_as_superuser PASSED [ 88%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroupproject_changelist_as_superuser PASSED [100%]
+
+============================== 9 passed in 29.01s ==============================
+exit=0
+
+--- COMMAND 2: sibling admin tests (regression) ---
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_groups.py label_studio/users/tests/test_admin_async_migrations_action.py -vv
+label_studio/users/tests/test_admin_async_migrations_action.py::TestAdminRunScheduledMigrations::test_import_error_marks_error PASSED [ 76%]
+label_studio/users/tests/test_admin_async_migrations_action.py::TestAdminRunScheduledMigrations::test_invalid_path_marks_error PASSED [ 84%]
+label_studio/users/tests/test_admin_async_migrations_action.py::TestAdminRunScheduledMigrations::test_passes_dependencies_from_meta PASSED [ 92%]
+label_studio/users/tests/test_admin_async_migrations_action.py::TestAdminRunScheduledMigrations::test_success_dispatches_job_and_updates_status PASSED [100%]
+
+============================= 13 passed in 30.87s ==============================
+
+--- MANUAL QA (real surface: runserver 50080, scratch DB) ---
+$ DATABASE_NAME=/tmp/opencode/t9-qa.sqlite3 DJANGO_DB=sqlite uv run python label_studio/manage.py migrate
+  Applying webhooks.0001_initial... OK
+  Applying webhooks.0002_auto_20220319_0013... OK
+  Applying webhooks.0003_alter_webhookaction_action... OK
+  Applying webhooks.0004_auto_20221221_1101... OK
+  Applying webhooks.0005_webhook_consecutive_failures... OK
+
+$ DATABASE_NAME=/tmp/opencode/t9-qa.sqlite3 DJANGO_DB=sqlite uv run python label_studio/manage.py shell -c '<create superuser>'
+=> Database and media directory: /root/.local/share/label-studio
+=> Static URL is set to: /static/
+Read environment variables from: /root/.local/share/label-studio/.env
+get 'SECRET_KEY' casted as <class 'str'> with default type str
+Starting new HTTPS connection (1): pypi.org:443
+https://pypi.org:443 "GET /pypi/label-studio/json HTTP/1.1" 200 41138
+/root/workspace/projetos/label-studio-wt/ugda-wave3/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+76 objects imported automatically (use -v 2 for details).
+
+superuser created: 1 t9qa@example.com is_staff= True is_superuser= True is_admin= False
+
+--- MANUAL QA, full clean run (real runserver surface, scratch DB) ---
+$ DATABASE_NAME=/tmp/opencode/t9-qa.sqlite3 DJANGO_DB=sqlite uv run python label_studio/manage.py migrate
+  Applying webhooks.0003_alter_webhookaction_action... OK
+  Applying webhooks.0004_auto_20221221_1101... OK
+  Applying webhooks.0005_webhook_consecutive_failures... OK
+$ ... shell: create superuser t9qa + org + membership; create non-staff user
+superuser: 1 t9qa@example.com is_staff True is_superuser True is_admin False
+non-staff: 2 t9nonstaff@example.com is_staff False
+$ sqlite3 check: scratch DB contains users (table htx_user)
+1|t9qa@example.com|1|1
+2|t9nonstaff@example.com|0|0
+$ sqlite3 check: group tables present
+user_group
+groups_usergroupmember
+groups_usergroupproject
+$ start: setsid ... manage.py runserver 50080 --noreload (DATABASE_NAME=/tmp/opencode/t9-qa.sqlite3 DJANGO_DB=sqlite)
+runserver PID=1705185
+server ready after 5s (GET /admin/login/ -> 200)
+$ GET /admin/login/ + POST admin login form (email+password, CSRF)
+POST /admin/login/ -> 302 redirect=http://127.0.0.1:50080/admin/
+follow-up GET /admin/ with that session -> 302 redirect=http://127.0.0.1:50080/admin/login/?next=/admin/
+NOTE: admin form login does not stamp session last_login (users/functions/common.py login() does; django.contrib.auth login in AdminSite does not);
+      InactivitySessionTimeoutMiddleWare (core/settings/label_studio.py:17) then logs the session out on the next request.
+      PRE-EXISTING behavior, out of T9 scope. Real users with an app-login session (last_login set) use the admin normally:
+$ POST /user/login/ (app login, sets last_login)
+POST /user/login/ -> 302 redirect=http://127.0.0.1:50080/
+$ GET admin pages as superuser:
+  GET /admin/ -> 200 <title>Site administration | Django site admin</title>
+  GET /admin/groups/usergroup/ -> 200 <title>Select user group to change | Django site admin</title>
+  GET /admin/groups/usergroupmember/ -> 200 <title>Select user group member to change | Django site admin</title>
+  GET /admin/groups/usergroupproject/ -> 200 <title>Select user group project to change | Django site admin</title>
+$ registered group model entries rendered on /admin/ index:
+      3 /admin/groups/usergroup/
+      3 /admin/groups/usergroupmember/
+      3 /admin/groups/usergroupproject/
+$ is_admin column on /admin/users/user/ changelist:
+  GET /admin/users/user/ -> 200; occurrences of 'is_admin' in HTML: 5
+$ non-staff user (is_staff=False) denied:
+POST /user/login/ (non-staff) -> 302
+  non-staff GET /admin/groups/usergroup/ -> 302 redirect=http://127.0.0.1:50080/admin/login/?next=/admin/groups/usergroup/
+  non-staff GET /admin/groups/usergroupmember/ -> 302 redirect=http://127.0.0.1:50080/admin/login/?next=/admin/groups/usergroupmember/
+  non-staff GET /admin/groups/usergroupproject/ -> 302 redirect=http://127.0.0.1:50080/admin/login/?next=/admin/groups/usergroupproject/
+$ kill runserver PID=1705185 (only this PID)
+  killed PID=1705185
+  port 50080 after kill: 000 (000=refused)
+  port 50080 refused
+$ rm -f /tmp/opencode/t9-qa.sqlite3 (scratch DB) + cookie jars
+  scratch DB deleted
+$ leftover runserver processes (must be none of mine):
+root     1704930  0.0  0.0   8380  4332 ?        Ss   20:39   0:00 /usr/bin/zsh -c export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false EV=/root/workspace/projetos/label-studio/.omo/evidence/task-9-user-groups-dataset-access.txt SCRATCH=/tmp/opencode/t9-qa.sqlite3 cd /root/workspace/projetos/label-studio-wt/ugda-wave3 rm -f "$SCRATCH" /tmp/opencode/t9-cookies.txt /tmp/opencode/t9-cookies2.txt { echo "--- MANUAL QA, full clean run (real runserver surface, scratch DB) ---" echo "\$ DATABASE_NAME=$SCRATCH DJANGO_DB=sqlite uv run python label_studio/manage.py migrate" DATABASE_NAME="$SCRATCH" DJANGO_DB=sqlite uv run python label_studio/manage.py migrate 2>&1 | tail -3 echo "\$ ... shell: create superuser t9qa + org + membership; create non-staff user" DATABASE_NAME="$SCRATCH" DJANGO_DB=sqlite uv run python label_studio/manage.py shell -c " from organizations.models import Organization, OrganizationMember from users.models import User su = User.objects.create_superuser(username='t9qa', email='t9qa@example.com', password='t9qa-pass-123') org = Organization.create_organization(created_by=su, title='T9 QA Org') OrganizationMember.objects.create(user=su, organization=org) su.active_organization = org su.save(update_fields=['active_organization']) ns = User.objects.create_user(username='t9nonstaff', email='t9nonstaff@example.com', password='pass') OrganizationMember.objects.create(user=ns, organization=org) print('superuser:', su.pk, su.email, 'is_staff', su.is_staff, 'is_superuser', su.is_superuser, 'is_admin', su.is_admin) print('non-staff:', ns.pk, ns.email, 'is_staff', ns.is_staff) " 2>&1 | tail -2 echo "\$ sqlite3 check: scratch DB contains users (table htx_user)" sqlite3 "$SCRATCH" 'SELECT id, email, is_staff, is_superuser FROM htx_user;' echo "\$ sqlite3 check: group tables present" sqlite3 "$SCRATCH" "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('user_group','groups_usergroupmember','groups_usergroupproject');" echo "\$ start: setsid ... manage.py runserver 50080 --noreload (DATABASE_NAME=$SCRATCH DJANGO_DB=sqlite)" setsid env DATABASE_NAME="$SCRATCH" DJANGO_DB=sqlite uv run python label_studio/manage.py runserver 50080 --noreload > /tmp/opencode/t9-runserver.log 2>&1 < /dev/null & SRV=$! echo "$SRV" > /tmp/opencode/t9-runserver.pid echo "runserver PID=$SRV" for i in $(seq 1 40); do   code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:50080/admin/login/ || true)   [ "$code" = "200" ] && { echo "server ready after ${i}s (GET /admin/login/ -> 200)"; break; }   sleep 1 done BASE=http://127.0.0.1:50080 echo "\$ GET /admin/login/ + POST admin login form (email+password, CSRF)" JAR=/tmp/opencode/t9-cookies.txt LOGIN_HTML=$(curl -s -c "$JAR" "$BASE/admin/login/") CSRF=$(printf '%s' "$LOGIN_HTML" | grep -o 'name="csrfmiddlewaretoken" value="[^"]*"' | sed 's/.*value="//;s/"//') curl -s -b "$JAR" -c "$JAR" -o /dev/null -w 'POST /admin/login/ -> %{http_code} redirect=%{redirect_url}\n' \   --data-urlencode "csrfmiddlewaretoken=$CSRF" --data-urlencode "username=t9qa@example.com" \   --data-urlencode "password=t9qa-pass-123" --data-urlencode "next=/admin/" \   -e "$BASE/admin/login/" "$BASE/admin/login/" curl -s -b "$JAR" -o /dev/null -w 'follow-up GET /admin/ with that session -> %{http_code} redirect=%{redirect_url}\n' "$BASE/admin/" echo "NOTE: admin form login does not stamp session last_login (users/functions/common.py login() does; django.contrib.auth login in AdminSite does not);" echo "      InactivitySessionTimeoutMiddleWare (core/settings/label_studio.py:17) then logs the session out on the next request." echo "      PRE-EXISTING behavior, out of T9 scope. Real users with an app-login session (last_login set) use the admin normally:" rm -f "$JAR" echo "\$ POST /user/login/ (app login, sets last_login)" LOGIN_HTML=$(curl -s -c "$JAR" "$BASE/user/login/") CSRF=$(printf '%s' "$LOGIN_HTML" | grep -o 'name="csrfmiddlewaretoken" value="[^"]*"' | sed 's/.*value="//;s/"//') curl -s -b "$JAR" -c "$JAR" -o /dev/null -w 'POST /user/login/ -> %{http_code} redirect=%{redirect_url}\n' \   --data-urlencode "csrfmiddlewaretoken=$CSRF" --data-urlencode "email=t9qa@example.com" \   --data-urlencode "password=t9qa-pass-123" --data-urlencode "persist_session=on" \   -e "$BASE/user/login/" "$BASE/user/login/" echo "\$ GET admin pages as superuser:" for p in /admin/ /admin/groups/usergroup/ /admin/groups/usergroupmember/ /admin/groups/usergroupproject/; do   code=$(curl -s -b "$JAR" -c "$JAR" -o /tmp/opencode/t9-page.html -w '%{http_code}' "$BASE$p")   title=$(grep -o '<title>[^<]*</title>' /tmp/opencode/t9-page.html | head -1)   echo "  GET $p -> $code $title" done echo "\$ registered group model entries rendered on /admin/ index:" curl -s -b "$JAR" "$BASE/admin/" | grep -oE '/admin/groups/[a-z]+/' | sort | uniq -c echo "\$ is_admin column on /admin/users/user/ changelist:" code=$(curl -s -b "$JAR" -o /tmp/opencode/t9-users.html -w '%{http_code}' "$BASE/admin/users/user/") echo "  GET /admin/users/user/ -> $code; occurrences of 'is_admin' in HTML: $(grep -c 'is_admin' /tmp/opencode/t9-users.html)" echo "\$ non-staff user (is_staff=False) denied:" JAR2=/tmp/opencode/t9-cookies2.txt LOGIN_HTML=$(curl -s -c "$JAR2" "$BASE/user/login/") CSRF=$(printf '%s' "$LOGIN_HTML" | grep -o 'name="csrfmiddlewaretoken" value="[^"]*"' | sed 's/.*value="//;s/"//') curl -s -b "$JAR2" -c "$JAR2" -o /dev/null -w 'POST /user/login/ (non-staff) -> %{http_code}\n' \   --data-urlencode "csrfmiddlewaretoken=$CSRF" --data-urlencode "email=t9nonstaff@example.com" \   --data-urlencode "password=pass" --data-urlencode "persist_session=on" \   -e "$BASE/user/login/" "$BASE/user/login/" for p in /admin/groups/usergroup/ /admin/groups/usergroupmember/ /admin/groups/usergroupproject/; do   code=$(curl -s -b "$JAR2" -c "$JAR2" -o /dev/null -w '%{http_code}' "$BASE$p")   loc=$(curl -s -b "$JAR2" -o /dev/null -w '%{redirect_url}' "$BASE$p")   echo "  non-staff GET $p -> $code redirect=$loc" done echo "\$ kill runserver PID=$SRV (only this PID)" kill "$SRV" 2>/dev/null || true sleep 2 ps -p "$SRV" > /dev/null 2>&1 && { kill -9 "$SRV" 2>/dev/null || true; sleep 1; } ps -p "$SRV" > /dev/null 2>&1 && echo "  STILL ALIVE" || echo "  killed PID=$SRV" curl -s -o /dev/null -m 3 -w '  port 50080 after kill: %{http_code} (000=refused)\n' "$BASE/admin/login/" || echo "  port 50080 refused" echo "\$ rm -f $SCRATCH (scratch DB) + cookie jars" rm -f "$SCRATCH" /tmp/opencode/t9-cookies.txt /tmp/opencode/t9-cookies2.txt /tmp/opencode/t9-page.html /tmp/opencode/t9-users.html ls "$SCRATCH" 2>/dev/null && echo "  SCRATCH STILL PRESENT" || echo "  scratch DB deleted" echo "\$ leftover runserver processes (must be none of mine):" ps aux | grep "[m]anage.py runserver" || echo "  none" } >> "$EV" 2>&1 echo "=== evidence tail ===" tail -45 "$EV"
+
+--- FINAL CHECKS ---
+$ ps: actual python runserver processes (zsh wrappers excluded)
+1705522 /usr/bin/zsh -c export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false; export CI=true DEBIAN_FRONTEND=noninteractive GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never HOMEBREW_NO_AUTO_UPDATE=1 GIT_EDITOR=: EDITOR=: VISUAL='' GIT_SEQUENCE_EDITOR=: GIT_MERGE_AUTOEDIT=no GIT_PAGER=cat PAGER=cat npm_config_yes=true PIP_NO_INPUT=1 YARN_ENABLE_IMMUTABLE_INSTALLS=false EV=/root/workspace/projetos/label-studio/.omo/evidence/task-9-user-groups-dataset-access.txt { echo echo "--- FINAL CHECKS ---" echo "\$ ps: actual python runserver processes (zsh wrappers excluded)" ps -eo pid,cmd | grep "[p]ython.*manage.py runserver" || echo "  none" echo "\$ ls scratch DB:"; ls -la /tmp/opencode/t9-qa.sqlite3 2>/dev/null || echo "  /tmp/opencode/t9-qa.sqlite3: gone (deleted)" echo "\$ curl port 50080:"; curl -s -o /dev/null -m 3 -w '  %{http_code} (000=refused)\n' http://127.0.0.1:50080/admin/login/ || echo "  refused" echo "\$ git status (worktree):"; git -C /root/workspace/projetos/label-studio-wt/ugda-wave3 status --porcelain echo "\$ git diff --stat:"; git -C /root/workspace/projetos/label-studio-wt/ugda-wave3 diff --stat } >> "$EV" 2>&1 sed -n '/--- FINAL CHECKS ---/,$p' "$EV"
+$ ls scratch DB:
+  /tmp/opencode/t9-qa.sqlite3: gone (deleted)
+$ curl port 50080:
+  000 (000=refused)
+  refused
+$ git status (worktree):
+ M label_studio/core/urls.py
+ M label_studio/groups/api.py
+ M label_studio/groups/serializers.py
+ M label_studio/groups/urls.py
+ M label_studio/users/admin.py
+ M label_studio/users/api.py
+ M label_studio/users/urls.py
+?? label_studio/groups/tests/test_api.py
+?? label_studio/users/tests/test_admin_api.py
+?? label_studio/users/tests/test_admin_groups.py
+$ git diff --stat:
+ label_studio/core/urls.py          |   1 +
+ label_studio/groups/api.py         | 111 +++++++++++++++++++++++
+ label_studio/groups/serializers.py |  39 +++++++++
+ label_studio/groups/urls.py        |  28 ++++++
+ label_studio/users/admin.py        |  29 +++++-
+ label_studio/users/api.py          | 175 ++++++++++++++++++++++++++++++++++++-
+ label_studio/users/urls.py         |   4 +
+ 7 files changed, 384 insertions(+), 3 deletions(-)
+
+--- LINT (ruff) ---
+$ uv run --with ruff ruff check label_studio/users/admin.py label_studio/users/tests/test_admin_groups.py
+All checks passed!
+exit=0
+$ uv run --with ruff ruff format --check (same files)
+2 files already formatted
+exit=0
+$ LSP: basedpyright not installed (user previously declined) - proceeded without LSP; ruff + pytest used instead
+
+--- FINAL pytest after import-order fix ---
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_groups.py -vv
+plugins: xdist-3.8.0, anyio-4.14.2, requests-mock-1.12.1, env-1.6.0, cov-7.1.0, django-4.12.0, tavern-3.3.3, Faker-40.8.0, mock-3.15.1
+collecting ... collected 9 items
+
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_django_auth_group_stays_unregistered PASSED [ 11%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_is_admin_in_user_admin_short_display_filter_and_fieldsets PASSED [ 22%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_member_registered PASSED [ 33%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_project_registered PASSED [ 44%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminRegistration::test_user_group_registered PASSED [ 55%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_admin_pages_denied_for_non_staff PASSED [ 66%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroup_changelist_as_superuser PASSED [ 77%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroupmember_changelist_as_superuser PASSED [ 88%]
+label_studio/users/tests/test_admin_groups.py::TestGroupAdminPages::test_usergroupproject_changelist_as_superuser PASSED [100%]
+
+============================== 9 passed in 27.31s ==============================
+exit=0

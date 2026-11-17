@@ -1,0 +1,276 @@
+===== T10 evidence: admin API endpoint registry + frontend types + unit tests =====
+date: 2026-11-16T21:14:40-03:00 per `date -Iseconds` (system clock; env banner claimed Nov 17); worker mimo-v2.6-flash via Sisyphus-Junior
+worktree: /root/workspace/projetos/label-studio-wt/ugda-wave4 (branch ulw/user-groups-dataset-access-wave4)
+main checkout /root/workspace/projetos/label-studio was NEVER edited (read-only plan/evidence access)
+task: plan row T10 of .omo/plans/user-groups-dataset-access.md ("- [ ] 10. Frontend: ApiConfig + tipos APIUser.is_admin + tipos de grupo + testes")
+
+--- git status BEFORE any T10 edit (pristine waves 1-3 state) ---
+(empty output = clean worktree at session start)
+
+--- plan row T10 (grep on /root/workspace/projetos/label-studio/.omo/plans/user-groups-dataset-access.md) ---
+211:- [ ] 10. Frontend: ApiConfig + tipos `APIUser.is_admin` + tipos de grupo + testes
+217:  Acceptance criteria: `bun run ls:unit src/config` (ou arquivo de teste novo) passa; `bun run build` limpo; tipo `APIUser` inclui `is_admin`.
+219:  Commit: Y | feat(admin): add admin API endpoints and frontend types   <- NOT done here: task forbids commit/push
+
+--- backend routes the endpoint map must hit: REAL captures below ---
+
+--- REAL capture: backend admin routes ---
+$ grep -n admin /root/workspace/projetos/label-studio-wt/ugda-wave4/label_studio/users/urls.py
+34:    path('api/admin/users/', api.AdminUserListAPI.as_view(), name='admin-user-list'),
+35:    path('api/admin/users/<int:pk>/', api.AdminUserDetailAPI.as_view(), name='admin-user-detail'),
+36:    path('api/admin/users/<int:pk>/groups/', api.AdminUserGroupsAPI.as_view(), name='admin-user-groups'),
+$ grep -n admin /root/workspace/projetos/label-studio-wt/ugda-wave4/label_studio/groups/urls.py
+7:    path('api/admin/groups/', api.AdminGroupListAPI.as_view(), name='admin-group-list'),
+8:    path('api/admin/groups/<int:pk>/', api.AdminGroupDetailAPI.as_view(), name='admin-group-detail'),
+10:        'api/admin/groups/<int:pk>/members/',
+12:        name='admin-group-member-list',
+15:        'api/admin/groups/<int:pk>/members/<int:user_pk>/',
+17:        name='admin-group-member-detail',
+20:        'api/admin/groups/<int:pk>/projects/',
+22:        name='admin-group-project-list',
+25:        'api/admin/groups/<int:pk>/projects/<int:project_pk>/',
+27:        name='admin-group-project-detail',
+
+--- REAL capture: endpoint serializer fields the frontend types mirror ---
+$ sed -n '477,490p' /root/workspace/projetos/label-studio-wt/ugda-wave4/label_studio/users/api.py  (AdminUserSerializer fields)
+        model = User
+        fields = (
+            'id',
+            'email',
+            'username',
+            'first_name',
+            'last_name',
+            'is_active',
+            'is_admin',
+            'date_joined',
+            'last_activity',
+            'groups',
+        )
+        read_only_fields = ('id', 'date_joined', 'last_activity', 'groups')
+$ grep -n "fields = " /root/workspace/projetos/label-studio-wt/ugda-wave4/label_studio/groups/serializers.py (UserGroup/Member/Project fields)
+12:        fields = ['id', 'organization', 'name', 'description', 'created_by', 'created_at', 'updated_at']
+13:        read_only_fields = ['id', 'organization', 'created_by', 'created_at', 'updated_at']
+23:        fields = ['id', 'group', 'user', 'user_email', 'user_name', 'created_at']
+24:        read_only_fields = ['id', 'group', 'created_at']
+36:        fields = ['id', 'group', 'project', 'project_title', 'created_at']
+37:        read_only_fields = ['id', 'group', 'created_at']
+--- UNIT TESTS (fresh real runs) ---
+$ cd web && bun run ls:unit src/config
+$ bun test --dom apps/labelstudio/src src/config
+bun test v1.3.14 (0d9b296a)
+
+ 41 pass
+ 0 fail
+ 53 expect() calls
+Ran 41 tests across 4 files. [1.66s]
+exit=0
+
+$ cd web && bun test --dom apps/labelstudio/src/config/ApiConfig.test.ts   (the new T10 test, full)
+bun test v1.3.14 (0d9b296a)
+
+ 20 pass
+ 0 fail
+ 22 expect() calls
+Ran 20 tests across 1 file. [1.69s]
+exit=0
+
+--- NEGATIVE runtime check (guards misleading_success_output): break one endpoint value, test MUST fail ---
+$ sed -i 's|adminUsers: "/admin/users",|adminUsers: "/admin/users-TYPO",|' apps/labelstudio/src/config/ApiConfig.js
+$ bun test --dom apps/labelstudio/src/config/ApiConfig.test.ts  (expect FAIL)
+bun test v1.3.14 (0d9b296a)
+
+apps/labelstudio/src/config/ApiConfig.test.ts:
+31 |     expect(Object.keys(ADMIN_ENDPOINTS)).toHaveLength(18);
+32 |   });
+33 | 
+34 |   for (const [key, value] of Object.entries(ADMIN_ENDPOINTS)) {
+35 |     it(`endpoints.${key} resolves to ${value}`, () => {
+36 |       expect(ENDPOINTS[key]).toBe(value);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: "/admin/users"
+Received: "/admin/users-TYPO"
+
+      at <anonymous> (/root/workspace/projetos/label-studio-wt/ugda-wave4/web/apps/labelstudio/src/config/ApiConfig.test.ts:36:30)
+(fail) API_CONFIG admin endpoints > endpoints.adminUsers resolves to /admin/users [0.56ms]
+37 |     });
+38 |   }
+39 | 
+40 |   it("keeps adminUsers on the API gateway prefix", () => {
+41 |     expect(API_CONFIG.gateway.endsWith("/api")).toBe(true);
+42 |     expect(`${API_CONFIG.gateway}${ENDPOINTS.adminUsers}`).toBe(`${API_CONFIG.gateway}/admin/users`);
+                                                                ^
+error: expect(received).toBe(expected)
+
+Expected: "http://localhost/api/admin/users"
+Received: "http://localhost/api/admin/users-TYPO"
+
+      at <anonymous> (/root/workspace/projetos/label-studio-wt/ugda-wave4/web/apps/labelstudio/src/config/ApiConfig.test.ts:42:60)
+(fail) API_CONFIG admin endpoints > keeps adminUsers on the API gateway prefix [0.36ms]
+
+ 18 pass
+ 2 fail
+ 22 expect() calls
+Ran 20 tests across 1 file. [1.57s]
+exit code note: the numeric exit was mis-captured by the zsh PIPESTATUS fallback above (prints 0); the authoritative runner result is the bun tail itself: "18 pass / 2 fail / Ran 20 tests" with "(fail) ... Expected: "/admin/users" Received: "http://localhost/api/admin/users-TYPO"" — bun test exits non-zero on any fail (same command exited 0 only when green, shown below).
+$ restore: sed -i back + git diff check
+20:    adminUsers: "/admin/users",
+$ re-run after restore (expect GREEN)
+bun test v1.3.14 (0d9b296a)
+
+ 20 pass
+ 0 fail
+ 22 expect() calls
+Ran 20 tests across 1 file. [1.59s]
+exit=0
+
+--- TYPECHECK (tsc --noEmit) ---
+ENV LIMITATION (pre-existing, both checkouts):
+$ bunx tsc --noEmit -p apps/labelstudio/tsconfig.app.json
+error TS6053: File '.../web/node_modules/@nx/react/typings/cssmodule.d.ts' not found.
+error TS6053: File '.../web/node_modules/@nx/react/typings/image.d.ts' not found.
+=> tsconfig.app.json/tsconfig.spec.json reference @nx/react typings that are NOT in package.json (verified: grep '"@nx/' package.json -> no match; node_modules/@nx absent in BOTH worktree and main checkout). tsc -p <repo config> is broken at baseline, independent of T10.
+
+WORKAROUND (no repo files touched): temp configs in /tmp/opencode/ extending the repo configs with files[] overridden (drops missing @nx typings), absolute typeRoots (web/node_modules/@types), and /tmp/opencode/t10-globals.d.ts recreating the ambient *.css/*.svg/*.png declarations.
+$ bunx tsc --noEmit -p /tmp/opencode/t10-tsconfig-app.json   (extends apps/labelstudio/tsconfig.app.json)
+$ bunx tsc --noEmit -p /tmp/opencode/t10-tsconfig-spec.json  (extends apps/labelstudio/tsconfig.spec.json; includes src/**/*.test.ts + test/bun/globals.d.ts)
+
+BASELINE (pristine waves 1-3, my changes git stash -u'd away):
+  git stash push -u -m t10-baseline-check   -> worktree clean, then:
+  baseline app  errors: 1419
+  baseline spec errors: 908
+  git stash pop    -> my changes restored (files verified: ApiConfig.js modified; admin.ts + ApiConfig.test.ts untracked)
+
+WITH T10 CHANGES (stash popped):
+  with-T10 app  errors: 1419
+  with-T10 spec errors: 908
+  => identical counts to baseline => T10 introduces ZERO new typecheck errors
+
+$ grep -E 'types/admin|ApiConfig' t10-tsc-app.log  (my files under app typecheck):
+  (no matches = ZERO errors in T10 files)
+$ grep -E 'ApiConfig.test|types/admin' t10-tsc-spec.log  (my files under spec/test typecheck):
+  (no matches = ZERO errors in T10 files)
+
+FAILURE SCENARIO (plan QA: 'typecheck falha se is_admin ausente'):
+$ sed -i 's|  is_admin: boolean;||' libs/core/src/types/user.ts   (temporarily remove is_admin from APIUser)
+$ bunx tsc --noEmit -p /tmp/opencode/t10-tsconfig-app.json:
+apps/labelstudio/src/types/admin.ts(5,3): error TS2344: Type '"id" | "email" | "username" | "first_name" | "last_name" | "last_activity" | "date_joined" | "is_admin"' does not satisfy the constraint 'keyof APIUser'.
+$ bunx tsc --noEmit -p /tmp/opencode/t10-tsconfig-spec.json:
+apps/labelstudio/src/config/ApiConfig.test.ts(48,37): error TS2344: Type '"is_admin"' does not satisfy the constraint 'keyof APIUser'.
+$ git checkout -- libs/core/src/types/user.ts  (restore)
+  restored: user.ts line 20 reads 'is_admin: boolean;' again; git status shows user.ts NOT modified
+
+--- TYPE-LEVEL assertion location ---
+apps/labelstudio/src/types/admin.ts: AdminUser = Pick<APIUser, 'id'|...|'is_admin'> & {...}  -> app tsc fails if APIUser.is_admin disappears (TS2344 above)
+apps/labelstudio/src/config/ApiConfig.test.ts: type ApiUserIsAdmin = Pick<APIUser,'is_admin'>['is_admin']; const apiUserHasIsAdmin: ApiUserIsAdmin = true -> spec tsc fails if is_admin missing/not boolean (TS2344 above)
+runtime bun test asserts the 18 endpoint keys + gateway composition (bun strips types, so runtime cannot check types -> tsc is the gate, as above)
+
+--- BUILD: bun run build (fresh run, exit 0) ---
+$ cd web && bun run build > /tmp/opencode/t10-build.log 2>&1; echo build_exit=$?
+build_exit=0
+full log: /tmp/opencode/t10-build.log (47 lines). tail:
+dist/apps/labelstudio/constants-BU4SQ67R.js                        0.35 kB │ gzip:   0.28 kB │ map:     3.41 kB
+dist/apps/labelstudio/rolldown-runtime-DGKQvOhM.js                 0.84 kB │ gzip:   0.48 kB
+dist/apps/labelstudio/production-CRuU7WTB.js                       1.84 kB │ gzip:   0.70 kB │ map:     4.58 kB
+dist/apps/labelstudio/interfaceComponentsRegistry-0KIDHCys.js      3.36 kB │ gzip:   1.36 kB │ map:    13.22 kB
+dist/apps/labelstudio/development-EketQPJz.js                      5.00 kB │ gzip:   2.03 kB │ map:    11.66 kB
+dist/apps/labelstudio/messages-BkpxH_yf.js                        27.74 kB │ gzip:  11.69 kB │ map:    91.66 kB
+dist/apps/labelstudio/FFTProcessor-DY8Zc6pl.js                   134.09 kB │ gzip:  50.43 kB │ map:   278.60 kB
+dist/apps/labelstudio/docs-ck6c-f-P.js                           388.50 kB │ gzip: 120.11 kB │ map: 1,379.92 kB
+dist/apps/labelstudio/src-DiATCxcq.js                            525.08 kB │ gzip: 155.15 kB │ map: 1,814.55 kB
+dist/apps/labelstudio/vendor-BSohCovu.js                       1,729.76 kB │ gzip: 543.50 kB │ map: 7,192.90 kB
+dist/apps/labelstudio/src-C5AMIytz.js                          2,046.47 kB │ gzip: 579.69 kB │ map: 6,245.58 kB
+dist/apps/labelstudio/main-DbuT2wz8.js                         2,181.65 kB │ gzip: 708.97 kB │ map: 7,714.88 kB
+✓ built in 27.29s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 2000 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+  dist/apps/labelstudio/static/js/sw.js       18.6kb
+  dist/apps/labelstudio/static/js/sw.js.map  147.9kb
+
+⚡ Done in 12ms
+[service-worker] precached 18 entries (~8850724 bytes manifest payload)
+
+--- MANUAL QA artifact: endpoint resolution through the real API proxy gateway ---
+$ bun /tmp/opencode/t10-runtime-qa.mjs
+script: sets window.APP_SETTINGS={hostname:http://localhost:8080}, imports the REAL ApiConfig.js + libs/core APIProxy,
+mocks fetch to record requests, invokes adminUsers/updateAdminUser/updateAdminUserGroups/deleteAdminGroupMember/addAdminGroupProject
+gateway: http://localhost:8080/api
+endpoints.adminUsers: /admin/users
+
+resolved requests through API proxy gateway:
+  GET    http://localhost:8080/api/admin/users
+  PATCH  http://localhost:8080/api/admin/users/7
+  PUT    http://localhost:8080/api/admin/users/7/groups
+  DELETE http://localhost:8080/api/admin/groups/3/members/9
+  POST   http://localhost:8080/api/admin/groups/3/projects
+
+all resolved URLs+methods match backend routes: true
+qa_exit=0
+
+trailing-slash parity note: the proxy strips trailing slashes for EVERY endpoint (api-proxy createUrl: pathname += path.replace(/\/+$/,'')) and the backend uses
+  label_studio/core/settings/base.py:280: 'core.middleware.CommonMiddlewareAppendSlashWithoutRedirect' (instead of CommonMiddleware), APPEND_SLASH = False (base.py:1109)
+  -> slashless paths are rewritten server-side WITHOUT redirect; this is exactly how pre-existing endpoints (users, projects, ...) already work.
+
+--- LINT (biome, repo linter) ---
+$ bunx biome check apps/labelstudio/src/config/ApiConfig.js apps/labelstudio/src/config/ApiConfig.test.ts apps/labelstudio/src/types/admin.ts
+Checked 3 files in 5ms. No fixes applied.
+biome_exit=0
+LSP note: typescript LSP not installed (user previously declined) -> diagnostics provided by the tsc runs above instead.
+
+--- CLEANUP (build artifacts MUST NOT be left in repo) ---
+$ git status after 'bun run build' showed build output pollution:
+ M label_studio/core/static/js/sw.js   (service-worker tool rewrote precache manifest with new bundle hashes)
+?? label_studio/core/static/js/manifest.json
+?? label_studio/core/static/js/sw.js.map
+$ git checkout -- label_studio/core/static/js/sw.js && rm -f label_studio/core/static/js/manifest.json label_studio/core/static/js/sw.js.map
+$ rm -rf web/dist web/coverage   (gitignored build/test outputs regenerated by the required 'bun run build' + bun test runs; fully regenerable: bun run build / bun run ls:unit)
+  web/dist: removed
+  web/coverage: removed
+
+--- FINAL git status (worktree ugda-wave4) ---
+ M web/apps/labelstudio/src/config/ApiConfig.js
+?? web/apps/labelstudio/src/config/ApiConfig.test.ts
+?? web/apps/labelstudio/src/types/admin.ts
+--- git diff --stat ---
+ web/apps/labelstudio/src/config/ApiConfig.js | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+--- proof user.ts untouched (is_admin still present from Wave 1) ---
+20:  is_admin: boolean;
+--- files NOT in scope were never edited: git diff shows only ApiConfig.js; untracked are the 2 intended new files ---
+
+--- MANUAL QA artifact pointers ---
+  evidence file: /root/workspace/projetos/label-studio/.omo/evidence/task-10-user-groups-dataset-access.txt (this file)
+  QA script (temp, outside repo): /tmp/opencode/t10-runtime-qa.mjs (exit 0; output above)
+  tsc logs (temp, outside repo): /tmp/opencode/t10-tsc-{app,spec,app-baseline,spec-baseline,app-noisadmin,spec-noisadmin}.log
+  build log (temp, outside repo): /tmp/opencode/t10-build.log
+  temp tsconfigs (outside repo): /tmp/opencode/t10-tsconfig-{app,spec}.json + t10-globals.d.ts
+
+--- RISKS / CAVEATS ---
+1. Repo-native 'bunx tsc -p apps/labelstudio/tsconfig.app.json' fails at BASELINE (TS6053, missing node_modules/@nx/react typings; @nx/* absent from package.json in both worktree and main checkout). Verified via temp configs extending the repo ones; with-T10 error counts are IDENTICAL to stash-baseline (1419 app / 908 spec) and ZERO errors land in T10 files. If a future env installs @nx/react, re-run the native command to confirm.
+2. APIUser.is_admin assertions are type-level (enforced by tsc spec/app runs, TS2344 negative proven above); bun strips types so the runtime test covers the 18 endpoint keys + gateway composition only.
+3. Endpoint values intentionally omit the backend's trailing slash; resolution relies on core.middleware.CommonMiddlewareAppendSlashWithoutRedirect (APPEND_SLASH=False) exactly like every pre-existing endpoint. Not exercised against a live Django server in this task (config/types-only deliverable); the runtime QA exercises the real APIProxy code path with mocked fetch.
+4. No admin gate uses permissions.can('users.manage') — T10 touches no gate code; pages/Menubar gate with user.is_admin is T11+ scope (explicitly out of T10).
+5. Plan row says 'Commit: Y' but task instructions forbid commit/push -> 3 files left uncommitted in the worktree for the orchestrator to commit with message: feat(admin): add admin API endpoints and frontend types
+6. web/dist and web/coverage were deleted in cleanup (gitignored, regenerable). label_studio/core/static/js/sw.js restored to HEAD; manifest.json/sw.js.map removed -> worktree holds only the 3 T10 files.
+7. user.ts (web/libs/core/src/types/user.ts) NOT edited: Wave 1 already added is_admin (line 20); re-verified above after the negative-scenario checkout.
+
+--- FINAL ACCEPTANCE RUN (plan criterion: 'bun run ls:unit src/config passa') against FINAL file states ---
+$ cd web && bun run ls:unit src/config
+$ bun test --dom apps/labelstudio/src src/config
+bun test v1.3.14 (0d9b296a)
+
+ 41 pass
+ 0 fail
+ 53 expect() calls
+Ran 41 tests across 4 files. [1.67s]
+exit=0
+$ rm -rf web/coverage (regenerated by bunfig coverage=true during the run)
+$ git -C worktree status --porcelain  (final)
+ M web/apps/labelstudio/src/config/ApiConfig.js
+?? web/apps/labelstudio/src/config/ApiConfig.test.ts
+?? web/apps/labelstudio/src/types/admin.ts

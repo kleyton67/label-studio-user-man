@@ -1,0 +1,209 @@
+================================================================================
+T2 - User.is_admin + admin permissions + is_admin in whoami + frontend type
+================================================================================
+Date:        2026-11-16
+Worktree:    /root/workspace/projetos/label-studio-wt/ugda-wave1
+Branch:      ulw/user-groups-dataset-access-wave1
+Plan row:    .omo/plans/user-groups-dataset-access.md  row "- [ ] 2."
+Main checkout /root/workspace/projetos/label-studio was NOT edited (only this
+evidence file was written under .omo/evidence/).
+
+--------------------------------------------------------------------------------
+1. DIRTY WORKTREE (adversarial class: dirty_worktree)
+--------------------------------------------------------------------------------
+git status --short  (after T2; `groups/` and core/settings/base.py are pre-existing
+T1 changes from the parallel wave, NOT touched by T2):
+
+ M label_studio/core/api_permissions.py
+ M label_studio/core/permissions.py
+ M label_studio/core/settings/base.py        <-- T1 (groups app in INSTALLED_APPS), not T2
+ M label_studio/users/models.py
+ M label_studio/users/serializers.py
+ M web/libs/core/src/types/user.ts
+?? label_studio/groups/                      <-- T1 untracked, not T2
+?? label_studio/users/migrations/0014_user_is_admin.py
+?? label_studio/users/tests/test_admin_permissions.py
+
+git diff --stat (T2 files only):
+ label_studio/core/api_permissions.py |  7 +++++++
+ label_studio/core/permissions.py     | 27 ++++++++++++++++++++++++++-
+ label_studio/users/models.py         |  2 ++
+ label_studio/users/serializers.py    |  6 +++++-
+ web/libs/core/src/types/user.ts      |  1 +
+
+Stub method preserved (NOT renamed/removed):
+ label_studio/users/models.py:176:    def is_organization_admin(self, org_pk):
+ label_studio/users/models.py:177:        return True
+
+--------------------------------------------------------------------------------
+2. CHANGES
+--------------------------------------------------------------------------------
+- label_studio/users/models.py:136
+    is_admin = models.BooleanField(_('admin'), default=False, db_default=False)
+- label_studio/users/migrations/0014_user_is_admin.py (new, generated)
+    AddField user.is_admin BooleanField(db_default=False, default=False, verbose_name="admin")
+    dependencies = [("users", "0013_backfill_creation_artifact_last_activity_async")]
+- label_studio/core/permissions.py
+    AllPermissions += users_manage='users.manage', groups_view='groups.view',
+      groups_create='groups.create', groups_change='groups.change',
+      groups_delete='groups.delete'
+    + def is_org_admin(user) -> bool:
+          return bool(user.is_superuser or getattr(user, 'is_admin', False)
+              or (user.active_organization_id is not None
+                  and user.active_organization.created_by_id == user.id))
+    + admin_permissions = {users_manage, groups_view, groups_create, groups_change, groups_delete}
+    registration loop: predicate = is_org_admin for those five, else rules.is_authenticated
+- label_studio/core/api_permissions.py
+    + class IsOrganizationAdmin(BasePermission):
+          has_permission -> bool(request.user and request.user.is_authenticated
+                                 and request.user.has_perm('users.manage'))
+- label_studio/users/serializers.py (BaseWhoAmIUserSerializer)
+    + is_admin = serializers.SerializerMethodField()
+    Meta.fields += ('is_admin',)
+    + def get_is_admin(self, user) -> bool: return bool(user.has_perm('users.manage'))
+    get_permissions() untouched (still returns all permissions on purpose)
+- web/libs/core/src/types/user.ts
+    APIUser += is_admin: boolean;
+- label_studio/users/tests/test_admin_permissions.py (new)
+
+--------------------------------------------------------------------------------
+3. COMMANDS + REAL OUTPUTS
+--------------------------------------------------------------------------------
+=== 3a. migration generation ================================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave1
+$ DJANGO_DB=sqlite uv run python label_studio/manage.py makemigrations users
+Migrations for 'users':
+  label_studio/users/migrations/0014_user_is_admin.py
+    + Add field is_admin to user
+
+=== 3b. required pytest command =============================================
+$ cd /root/workspace/projetos/label-studio-wt/ugda-wave1
+$ DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_admin_permissions.py \
+      label_studio/users/tests/test_serializers.py \
+      label_studio/users/tests/test_authz_api.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave1
+collected 19 items
+
+label_studio/users/tests/test_admin_permissions.py::test_whoami_is_admin_true_for_admin_flag PASSED
+label_studio/users/tests/test_admin_permissions.py::test_whoami_is_admin_true_for_org_creator PASSED
+label_studio/users/tests/test_admin_permissions.py::test_whoami_is_admin_false_for_plain_member PASSED
+label_studio/users/tests/test_admin_permissions.py::test_whoami_is_admin_false_without_active_organization PASSED
+label_studio/users/tests/test_admin_permissions.py::test_is_organization_admin_allows_admin_flag PASSED
+label_studio/users/tests/test_admin_permissions.py::test_is_organization_admin_allows_org_creator PASSED
+label_studio/users/tests/test_admin_permissions.py::test_is_organization_admin_denies_plain_member PASSED
+label_studio/users/tests/test_admin_permissions.py::test_is_organization_admin_denies_anonymous PASSED
+label_studio/users/tests/test_serializers.py (6 tests) PASSED
+label_studio/users/tests/test_authz_api.py::TestUserDeleteAuthzAPI (4 tests) PASSED
+
+============================= 19 passed in 40.42s ==============================
+
+=== 3c. plan acceptance suite (core/tests) =================================
+$ DJANGO_DB=sqlite uv run pytest label_studio/core/tests -vv
+============== 176 passed, 2 subtests passed in 61.87s (0:01:01) ===============
+
+=== 3d. migration drift check ==============================================
+$ DJANGO_DB=sqlite uv run python label_studio/manage.py makemigrations --check --dry-run
+No changes detected
+
+=== 3e. manual QA (real HTTP surface, port 50080) ===========================
+Dedicated throwaway sqlite DB (dev DB untouched):
+  DATABASE_NAME=/tmp/opencode/t2-qa.sqlite3
+
+$ DATABASE_NAME=/tmp/opencode/t2-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py migrate
+  ... users.0014_user_is_admin... OK
+
+$ DATABASE_NAME=/tmp/opencode/t2-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "<seed owner/org/admin/member + tokens>"
+OWNER_TOKEN=88967fd3852e342a609666c2896a906fcfba89df
+ADMIN_TOKEN=a0a93be55c0809fc9299be99167d0654d54310da
+MEMBER_TOKEN=b384fa172ea662bcff0cc0fec3140143dbcb7b52
+
+# legacy API token auth is off by default for a new org; enable it for QA
+$ DATABASE_NAME=/tmp/opencode/t2-qa.sqlite3 DJANGO_DB=sqlite \
+    uv run python label_studio/manage.py shell -c "enable org.jwt.legacy_api_tokens_enabled"
+org 1 legacy tokens enabled
+
+$ DATABASE_NAME=/tmp/opencode/t2-qa.sqlite3 DJANGO_DB=sqlite \
+    nohup uv run python label_studio/manage.py runserver 50080 --noreload \
+    > /tmp/opencode/t2-server.log 2>&1 &
+$ echo $! > /tmp/opencode/t2-server.pid
+1622317
+
+readiness poll (unauthenticated whoami -> 401): ready after 1s (http 401)
+
+--- admin token ---------------------------------------------------------------
+$ curl -s -i http://127.0.0.1:50080/api/current-user/whoami \
+      -H "Authorization: Token a0a93be55c0809fc9299be99167d0654d54310da"
+HTTP/1.1 200 OK
+Content-Type: application/json
+{"id":2,...,"username":"admin","email":"admin@example.com",...,
+ "permissions":[...,"users.manage","groups.view","groups.create","groups.change","groups.delete",...],
+ "is_admin":true}
+
+--- plain member token --------------------------------------------------------
+$ curl -s -i http://127.0.0.1:50080/api/current-user/whoami \
+      -H "Authorization: Token b384fa172ea662bcff0cc0fec3140143dbcb7b52"
+HTTP/1.1 200 OK
+Content-Type: application/json
+{"id":3,...,"username":"member","email":"member@example.com",...,
+ "permissions":[...,"users.manage","groups.view","groups.create","groups.change","groups.delete",...],
+ "is_admin":false}
+
+Full raw curl output: /tmp/opencode/t2-curl.log (kept during the run; temp dir)
+Note: whoami.permissions still lists every permission for any logged-in user
+(get_permissions unchanged); the admin gate is the separate is_admin field.
+
+--- teardown ------------------------------------------------------------------
+$ pkill -f "manage.py runserver 50080 --noreload"; kill $(cat /tmp/opencode/t2-server.pid)
+$ ps -eo pid,ppid,cmd | grep -E "[m]anage.py runserver" || echo 'no runserver process'
+no runserver process
+$ curl --max-time 3 http://127.0.0.1:50080/api/current-user/whoami
+http 000
+connection refused (server down)
+Server killed; PID 1622317 (uv) + child 1622321 (python) gone; port 50080 closed.
+
+--------------------------------------------------------------------------------
+4. ADVERSARIAL CLASSES
+--------------------------------------------------------------------------------
+- misleading_success_output: PASS. The pytest summary above is the real tail of the
+  actual run ("19 passed in 40.42s"); core/tests real tail "176 passed, 2 subtests
+  passed in 61.87s". No output was fabricated.
+- stale_state: PASS. whoami JSON was produced by the live server against a DB that
+  had users.0014_user_is_admin applied; admin -> "is_admin":true, member ->
+  "is_admin":false. The field and migration are reflected in the real response.
+- dirty_worktree: PASS. git status above; T2 touched only the 5 in-scope files plus
+  the new migration and new test. core/settings/base.py and label_studio/groups/ are
+  pre-existing T1 changes from the parallel wave, not T2.
+- security: PASS. Plain member (is_admin=False, not org creator) is denied by
+  IsOrganizationAdmin (test_is_organization_admin_denies_plain_member) and whoami
+  returns is_admin:false for it. Anonymous denied too.
+- others: N/A. No prompt-injection surface, no secrets committed, no network calls
+  beyond the local runserver; nothing else in the class list applies to a
+  model/permission/serializer/type change.
+
+--------------------------------------------------------------------------------
+5. RISKS
+--------------------------------------------------------------------------------
+- Frontend type only: web/libs/core has no node_modules in this worktree, so
+  `bun run build`/tsc was not executed. The change is one required boolean field;
+  runtime whoami always returns it. Recommend a `bun run build` in the final wave.
+- is_org_admin accesses user.active_organization; it is only reached for the five
+  admin permissions and all in-repo callers guard authentication first. A direct
+  has_perm('users.manage') on an AnonymousUser would hit the FK attribute; no such
+  call path exists in this codebase (IsOrganizationAdmin and get_is_admin both guard).
+- whoami.permissions intentionally still returns all permissions (unchanged by design);
+  consumers must gate on is_admin, not on permissions.can('users.manage').
+
+--------------------------------------------------------------------------------
+6. CLEANUP
+--------------------------------------------------------------------------------
+- runserver killed; port 50080 closed (verified).
+- Throwaway DB /tmp/opencode/t2-qa.sqlite3 removed after QA.
+- /tmp/opencode/t2-*.log, t2-server.pid removed after evidence capture.
+- No commit, no push. Dev sqlite DB (/root/.local/share/label-studio/label_studio.sqlite3)
+  untouched (QA used a dedicated DATABASE_NAME).
+================================================================================

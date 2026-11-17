@@ -1,0 +1,331 @@
+=== T15 evidence — 2026-11-17T02:51:39Z ===
+worktree: /root/workspace/projetos/label-studio-wt/ugda-wave5 (branch ulw/user-groups-dataset-access-wave5)
+
+--- $ git status --porcelain (BEFORE edits) ---
+ M label_studio/groups/serializers.py
+ M label_studio/groups/tests/test_api.py
+?? docs/source/guide/admin.md
+?? label_studio/tests/test_admin_groups_integration.py
+(empty = clean)
+
+--- NOTE: git status above taken AFTER my 2 edits; the two untracked files (docs/source/guide/admin.md, label_studio/tests/test_admin_groups_integration.py) are PRE-EXISTING (not created by T15, untouched) ---
+
+--- $ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv ---
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/bin/python
+cachedir: .pytest_cache
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave5
+configfile: pyproject.toml
+plugins: xdist-3.8.0, anyio-4.14.2, requests-mock-1.12.1, env-1.6.0, cov-7.1.0, django-4.12.0, tavern-3.3.3, Faker-40.8.0, mock-3.15.1
+collecting ... collected 32 items
+
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_lists_only_active_organization_groups PASSED [  3%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_creates_group PASSED [  6%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_duplicate_name_in_same_organization_returns_400 PASSED [  9%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_same_name_in_other_organization_is_allowed PASSED [ 12%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_create_ignores_client_supplied_organization_and_created_by PASSED [ 15%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_renames_group PASSED [ 18%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_deletes_group PASSED [ 21%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_admin_gets_group_detail PASSED [ 25%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_list_and_remove_member PASSED [ 28%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_requires_active_organization_membership PASSED [ 31%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_add_member_is_idempotent PASSED [ 34%]
+label_studio/groups/tests/test_api.py::TestAdminGroupMembers::test_remove_missing_member_is_404 PASSED [ 37%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_list_and_revoke_project PASSED [ 40%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_must_belong_to_active_organization PASSED [ 43%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_grant_project_is_idempotent PASSED [ 46%]
+label_studio/groups/tests/test_api.py::TestAdminGroupProjects::test_revoke_missing_project_link_is_404 PASSED [ 50%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_plain_member_is_forbidden_on_every_endpoint PASSED [ 53%]
+label_studio/groups/tests/test_api.py::TestAdminGroupPermissions::test_anonymous_is_rejected PASSED [ 56%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_other_organization_group_is_404 PASSED [ 59%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrossOrganization::test_cross_organization_project_link_is_404 PASSED [ 62%]
+label_studio/groups/tests/test_migrations.py::test_backfill_creates_default_group_for_each_organization PASSED [ 65%]
+label_studio/groups/tests/test_migrations.py::test_backfill_uses_organization_created_by PASSED [ 68%]
+label_studio/groups/tests/test_migrations.py::test_backfill_adds_active_members_and_skips_soft_deleted_members PASSED [ 71%]
+label_studio/groups/tests/test_migrations.py::test_backfill_links_all_projects_of_each_organization PASSED [ 75%]
+label_studio/groups/tests/test_migrations.py::test_backfill_is_idempotent_when_called_twice PASSED [ 78%]
+label_studio/groups/tests/test_models.py::test_create_group PASSED       [ 81%]
+label_studio/groups/tests/test_models.py::test_duplicate_name_in_same_organization_raises_integrity_error PASSED [ 84%]
+label_studio/groups/tests/test_models.py::test_same_name_allowed_in_different_organizations PASSED [ 87%]
+label_studio/groups/tests/test_models.py::test_duplicate_member_raises_integrity_error PASSED [ 90%]
+label_studio/groups/tests/test_models.py::test_duplicate_project_link_raises_integrity_error PASSED [ 93%]
+label_studio/groups/tests/test_models.py::test_has_permission_true_for_user_in_organization PASSED [ 96%]
+label_studio/groups/tests/test_models.py::test_has_permission_false_for_user_in_another_organization PASSED [100%]
+
+============================= 32 passed in 54.42s ==============================
+PYTEST_EXIT=
+--- $ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv (rerun with correct exit-code capture; zsh pipestatus) ---
+label_studio/groups/tests/test_models.py::test_duplicate_project_link_raises_integrity_error PASSED [ 93%]
+label_studio/groups/tests/test_models.py::test_has_permission_true_for_user_in_organization PASSED [ 96%]
+label_studio/groups/tests/test_models.py::test_has_permission_false_for_user_in_another_organization PASSED [100%]
+
+============================= 32 passed in 54.57s ==============================
+PYTEST_EXIT=0
+
+=== MANUAL QA (real HTTP) ===
+--- env: DATABASE_NAME=/tmp/opencode/t15-qa.sqlite3 DJANGO_DB=sqlite (scratch DB, NOT the dev DB) ---
+
+--- $ rm -f /tmp/opencode/t15-qa.sqlite3 && uv run python label_studio/manage.py migrate (tail) ---
+MIGRATE_EXIT=0
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more... OK
+  Applying webhooks.0001_initial... OK
+  Applying webhooks.0002_auto_20220319_0013... OK
+  Applying webhooks.0003_alter_webhookaction_action... OK
+  Applying webhooks.0004_auto_20221221_1101... OK
+  Applying webhooks.0005_webhook_consecutive_failures... OK
+=> Database and media directory: /root/.local/share/label-studio
+=> Static URL is set to: /static/
+Read environment variables from: /root/.local/share/label-studio/.env
+get 'SECRET_KEY' casted as <class 'str'> with default type str
+Starting new HTTPS connection (1): pypi.org:443
+https://pypi.org:443 "GET /pypi/label-studio/json HTTP/1.1" 200 41138
+/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+76 objects imported automatically (use -v 2 for details).
+
+Traceback (most recent call last):
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/sqlite3/base.py", line 360, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+sqlite3.IntegrityError: UNIQUE constraint failed: authtoken_token.user_id
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/label_studio/manage.py", line 23, in <module>
+    execute_from_command_line(sys.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/core/management/__init__.py", line 442, in execute_from_command_line
+    utility.execute()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/core/management/__init__.py", line 436, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/core/management/base.py", line 420, in run_from_argv
+    self.execute(*args, **cmd_options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/core/management/base.py", line 464, in execute
+    output = self.handle(*args, **options)
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/core/management/commands/shell.py", line 247, in handle
+    exec(options["command"], {**globals(), **self.get_namespace(**options)})
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 11, in <module>
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/query.py", line 665, in create
+    obj.save(force_insert=True, using=self.db)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/rest_framework/authtoken/models.py", line 41, in save
+    return super().save(*args, **kwargs)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+    ~~~~~~~~~~~~~~^
+        using=using,
+        ^^^^^^^^^^^^
+    ...<2 lines>...
+        update_fields=update_fields,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+        raw,
+    ...<4 lines>...
+        update_fields,
+    )
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/base.py", line 1169, in _save_table
+    results = self._do_insert(
+        cls._base_manager, using, fields, returning_fields, raw
+    )
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/base.py", line 1210, in _do_insert
+    return manager._insert(
+           ~~~~~~~~~~~~~~~^
+        [self],
+        ^^^^^^^
+    ...<3 lines>...
+        raw=raw,
+        ^^^^^^^^
+    )
+    ^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/query.py", line 1873, in _insert
+    return query.get_compiler(using=using).execute_sql(returning_fields)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1882, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/sentry_sdk/utils.py", line 1921, in runner
+    return sentry_patched_function(*args, **kwargs)
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/sentry_sdk/integrations/django/__init__.py", line 876, in execute
+    result = real_execute(self, sql, params)
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/sqlite3/base.py", line 360, in execute
+    return super().execute(query, params)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+django.db.utils.IntegrityError: UNIQUE constraint failed: authtoken_token.user_id
+Sentry is attempting to send 2 pending events
+Waiting up to 2 seconds
+Press Ctrl-C to quit
+--- NOTE: Token auto-created by LS User save; re-fetch existing token (first attempt failed with UNIQUE authtoken_token.user_id — expected) ---
+ADMIN_ID=1 ORG_ID=1 ACTIVE_ORG=1 TOKEN=<redacted: scratch-DB token, DB deleted> DB=default
+--- $ uv run python label_studio/manage.py runserver 50093 --noreload (background, scratch DB) ---
+SERVER_UP after 5s http=200
+PID=1810563
+Read environment variables from: /root/.local/share/label-studio/.env
+get 'SECRET_KEY' casted as <class 'str'> with default type str
+Starting new HTTPS connection (1): pypi.org:443
+https://pypi.org:443 "GET /pypi/label-studio/json HTTP/1.1" 200 41138
+/root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/lib/python3.13/site-packages/django/db/backends/utils.py:98: RuntimeWarning: Accessing the database during app initialization is discouraged. To fix this warning, avoid executing queries in AppConfig.ready() or when your app modules are imported.
+  warnings.warn(self.APPS_NOT_READY_WARNING_MSG, category=RuntimeWarning)
+[2026-11-16 23:56:58,093] [django.server::log_message::213] [INFO] "GET /user/login/ HTTP/1.1" 200 27365
+[2026-11-16 23:56:58,093] [django.server::log_message::213] [INFO] "GET /user/login/ HTTP/1.1" 200 27365
+
+--- POST #1 (duplicate name #1) $ curl -X POST /api/admin/groups/ -H "Authorization: Token ***" -d '{"name":"T15 Squad","description":"first"}' ---
+{"id":"51e768e6-c2ab-4652-aa9f-f3131ef51b86","status_code":401,"version":"1.24.0.dev0","detail":"Authentication token no longer valid: legacy token authentication has been disabled for this organization","exc_info":null}
+HTTP_STATUS=401
+
+--- POST #2 (same name, must be 400 with message, NOT 500) ---
+{"id":"920358fb-1f86-4ad9-95d6-cbfa59063d6f","status_code":401,"version":"1.24.0.dev0","detail":"Authentication token no longer valid: legacy token authentication has been disabled for this organization","exc_info":null}
+HTTP_STATUS=401
+
+--- POST #3 (control: different name still 201) ---
+{"id":"4fa91d8f-1d53-42c4-8d4b-9d21cb2ae71b","status_code":401,"version":"1.24.0.dev0","detail":"Authentication token no longer valid: legacy token authentication has been disabled for this organization","exc_info":null}
+HTTP_STATUS=401
+
+--- NOTE: 401 above is legacy-token phaseout (flag on + org.jwt.legacy_api_tokens_enabled=False). Enabling legacy tokens on the SCRATCH org (QA fixture only) ---
+legacy_api_tokens_enabled = True
+
+--- POST #1: create group 'T15 Squad' (expect 201) ---
+{"id":1,"organization":1,"name":"T15 Squad","description":"first","created_by":1,"created_at":"2026-11-16T23:57:56.970821-03:00","updated_at":"2026-11-16T23:57:56.970848-03:00"}
+HTTP_STATUS=201
+
+--- POST #2: duplicate 'T15 Squad' (expect 400 + message, NOT 500) ---
+{"id":"6abd9a86-d7f2-4fad-85c8-2310588484d0","status_code":400,"version":"1.24.0.dev0","detail":"Validation error","exc_info":null,"validation_errors":{"name":["A group with this name already exists in the organization."]}}
+HTTP_STATUS=400
+
+--- POST #3: control different name (expect 201) ---
+{"id":2,"organization":1,"name":"T15 Other","description":"control","created_by":1,"created_at":"2026-11-16T23:57:57.001317-03:00","updated_at":"2026-11-16T23:57:57.001333-03:00"}
+HTTP_STATUS=201
+
+--- GET list (confirm exactly 2 groups, no duplicate row) ---
+[{"id":2,"organization":1,"name":"T15 Other","description":"control","created_by":1,"created_at":"2026-11-16T23:57:57.001317-03:00","updated_at":"2026-11-16T23:57:57.001333-03:00"},{"id":1,"organization":1,"name":"T15 Squad","description":"first","created_by":1,"created_at":"2026-11-16T23:57:56.970821-03:00","updated_at":"2026-11-16T23:57:56.970848-03:00"}]
+HTTP_STATUS=200
+
+--- runserver log: POST lines + any 500/Traceback ---
+Traceback (most recent call last):
+[2026-11-16 23:57:12,034] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+[2026-11-16 23:57:12,034] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+Traceback (most recent call last):
+[2026-11-16 23:57:12,047] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+[2026-11-16 23:57:12,047] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+Traceback (most recent call last):
+[2026-11-16 23:57:12,061] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+[2026-11-16 23:57:12,061] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 401 220
+[2026-11-16 23:57:56,975] [django.server::log_message::213] [INFO] "POST /api/admin/groups/ HTTP/1.1" 201 177
+[2026-11-16 23:57:56,975] [django.server::log_message::213] [INFO] "POST /api/admin/groups/ HTTP/1.1" 201 177
+Traceback (most recent call last):
+[2026-11-16 23:57:56,989] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 400 223
+[2026-11-16 23:57:56,989] [django.server::log_message::213] [WARNING] "POST /api/admin/groups/ HTTP/1.1" 400 223
+[2026-11-16 23:57:57,005] [django.server::log_message::213] [INFO] "POST /api/admin/groups/ HTTP/1.1" 201 179
+[2026-11-16 23:57:57,005] [django.server::log_message::213] [INFO] "POST /api/admin/groups/ HTTP/1.1" 201 179
+--- server PID 1810563 killed: STOPPED ---
+--- port 50093 after kill: 000connection refused (down) ---
+--- scratch DB deleted: ls: cannot access '/tmp/opencode/t15-qa.sqlite3': No such file or directory ---
+
+--- log timeline clarification: Tracebacks above belong to the 401 phase (23:57:12, before legacy-token fixture fix); the QA sequence at 23:57:56-57 is 201/400/201. grep for 500 status:
+0
+(0 = no 500 responses)
+
+--- $ uv run python -m py_compile label_studio/groups/serializers.py label_studio/groups/tests/test_api.py ---
+py_compile OK
+
+--- $ uv run ruff check label_studio/groups/serializers.py label_studio/groups/tests/test_api.py ---
+error: Failed to spawn: ruff
+  cause: No such file or directory (os error 2)
+ruff not available/failed (see above)
+
+--- $ git status --porcelain + git diff --stat (AFTER) ---
+ M label_studio/groups/serializers.py
+ M label_studio/groups/tests/test_api.py
+?? docs/source/guide/admin.md
+?? label_studio/tests/test_admin_groups_integration.py
+ label_studio/groups/serializers.py    | 24 ++++++++++++++++++++++++
+ label_studio/groups/tests/test_api.py | 26 ++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+)
+
+--- lsp_diagnostics: basedpyright NOT installed (user previously declined) — proceeded with py_compile + ruff ---
+
+--- $ uvx ruff check <files> (fallback lint) ---
+All checks passed!
+--- FINAL RERUN after ASCII comment fix: $ DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv ---
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_duplicate_name_in_same_organization_returns_400 PASSED [  9%]
+label_studio/groups/tests/test_api.py::TestAdminGroupCrud::test_same_name_in_other_organization_is_allowed PASSED [ 12%]
+label_studio/groups/tests/test_models.py::test_duplicate_name_in_same_organization_raises_integrity_error PASSED [ 84%]
+============================= 32 passed in 56.23s ==============================
+PYTEST_EXIT=0
+All checks passed!
+py_compile OK
+
+=== FINAL STATE ===
+- changed files:
+label_studio/groups/serializers.py
+label_studio/groups/tests/test_api.py
+- untracked (PRE-EXISTING, not touched by T15):
+?? docs/source/guide/admin.md
+?? label_studio/tests/test_admin_groups_integration.py
+- scratch DB present: ls: cannot access '/tmp/opencode/t15-qa.sqlite3': No such file or directory
+- port 50093: 404
+- real dev DB untouched: all QA commands used DATABASE_NAME=/tmp/opencode/t15-qa.sqlite3 DJANGO_DB=sqlite
+
+=== DoneClaim ===
+{
+  "task": "T15 - duplicate group names return 400 instead of 500",
+  "changed_files": [
+    "label_studio/groups/serializers.py",
+    "label_studio/groups/tests/test_api.py"
+  ],
+  "tests": {
+    "command": "cd /root/workspace/projetos/label-studio-wt/ugda-wave5 && DJANGO_DB=sqlite uv run pytest label_studio/groups/tests -vv",
+    "result": "32 passed in 56.23s, PYTEST_EXIT=0 (final rerun after last edit; also green on first run: 32 passed in 54.42s)"
+  },
+  "manual_qa": {
+    "artifact": "/root/workspace/projetos/label-studio/.omo/evidence/task-15-user-groups-dataset-access.txt",
+    "result": "real HTTP on 127.0.0.1:50093 with scratch DB: POST #1 201 (T15 Squad), POST #2 400 with validation_errors.name=['A group with this name already exists in the organization.'] (not 500), control POST 201, GET list shows 2 groups with no duplicate row; runserver log has 0 responses with status 500"
+  },
+  "cleanup": "runserver PID 1810563 killed (port 50093 refuses connections); /tmp/opencode/t15-qa.sqlite3 deleted; no servers or scratch DBs left; no commit/push; real dev DB never used",
+  "risks": "Validate-time check does not close the race between validate() and save() (a concurrent duplicate insert can still hit the DB unique constraint -> IntegrityError -> 500); acceptable for admin low-concurrency use and the DB constraint remains the source of truth. basedpyright LSP not installed (user previously declined) so verification used py_compile + uvx ruff (both clean) + full pytest. Two pre-existing untracked files (docs/source/guide/admin.md, label_studio/tests/test_admin_groups_integration.py) belong to other work (T14) and were not touched."
+}
+
+=== POST-CLEANUP VERIFICATION (final) ===
+A transient listener appeared on 127.0.0.1:50093 (pid 1812864, started 00:00 - NOT my server: my runserver PID was 1810563, started 23:56, confirmed gone; another worker's runserver on 50092 was also visible at 00:00). It answered one 404 probe, then exited on its own. Re-checked now:
+  listeners on 50093: 0 (ss -tln)
+  curl http://127.0.0.1:50093/user/login/ -> curl_exit=7 (connection refused)
+  ps aux | grep runserver/manage.py -> no processes at all
+  my server PID 1810563 -> gone
+  scratch DB /tmp/opencode/t15-qa.sqlite3 -> deleted (No such file or directory)
+  scratch token redacted from this file; it was only valid for the deleted scratch DB
+=== END ===

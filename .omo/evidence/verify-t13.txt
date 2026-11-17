@@ -1,0 +1,125 @@
+{
+  "verdict": "CONFIRMED_WITH_BACKEND_GAP",
+  "failure_class": "backend_validation_missing",
+  "evidence": {
+    "frontend": {
+      "unit_tests": "88 pass, 0 fail (bun test src/pages/Admin)",
+      "build": "SUCCESS (25.57s, 11289 modules)",
+      "groups_page_exists": true,
+      "groups_page_test_exists": true,
+      "registered_in_admin_page": true,
+      "registered_in_index": true,
+      "test_coverage": [
+        "listing with auto-select",
+        "group switching",
+        "empty state",
+        "load error with retry",
+        "create with modal",
+        "name validation",
+        "create failure handling",
+        "rename",
+        "delete with confirmation",
+        "delete selected group",
+        "delete failure handling",
+        "member picker with filtering",
+        "add member",
+        "cross-org user rejection",
+        "remove member",
+        "member list load error",
+        "grant project access",
+        "revoke project access",
+        "cross-org project rejection",
+        "no optimistic state on pending grant"
+      ]
+    },
+    "backend": {
+      "unit_tests": "18 passed (groups/tests/test_api.py)",
+      "endpoints_tested": [
+        "admin-group-list (GET/POST)",
+        "admin-group-detail (GET/PATCH/DELETE)",
+        "admin-group-member-list (GET/POST)",
+        "admin-group-member-detail (DELETE)",
+        "admin-group-project-list (GET/POST)",
+        "admin-group-project-detail (DELETE)"
+      ],
+      "permissions_tested": [
+        "admin-only gate",
+        "anonymous rejection",
+        "active-organization scoping",
+        "cross-organization 404"
+      ],
+      "idempotency_tested": [
+        "add member twice -> 201 both times",
+        "grant project twice -> 201 both times"
+      ]
+    },
+    "duplicate_name_bug": {
+      "reproduced": true,
+      "status_code": 500,
+      "expected_status_code": 400,
+      "error_message": "UNIQUE constraint failed: user_group.organization_id, user_group.name",
+      "root_cause": "UserGroupSerializer lacks UniqueTogetherValidator for ['organization', 'name']",
+      "model_constraint": "unique_together = [['organization', 'name']] in UserGroup.Meta",
+      "serializer_location": "label_studio/groups/serializers.py:9-13",
+      "ui_handling": "failureMessage() extracts body.detail and shows it inline (line 36 of GroupsPage.jsx)",
+      "user_experience": "User sees raw database error 'UNIQUE constraint failed: ...' in modal, not a friendly message",
+      "fake_success": false,
+      "note": "UI does NOT show fake success - error is surfaced, but message is technical"
+    },
+    "cross_org_access": {
+      "user_grant_blocked": true,
+      "user_grant_status": 400,
+      "user_grant_error": "User is not an active member of the organization.",
+      "project_grant_blocked": true,
+      "project_grant_status": 400,
+      "project_grant_error": "Project does not belong to the organization.",
+      "cross_org_group_detail": "404 (filtered by organization in queryset)",
+      "ui_surfaces_errors": true
+    },
+    "playwright_e2e": {
+      "attempted": false,
+      "reason": "Playwright not installed in environment; relying on unit tests + code inspection + backend API tests"
+    }
+  },
+  "repro": {
+    "duplicate_name": {
+      "steps": [
+        "POST /api/admin/groups/ with {name: 'TestGroup'}",
+        "POST /api/admin/groups/ with {name: 'TestGroup'} again"
+      ],
+      "expected": "400 with validation_errors: {name: ['UserGroup with this name already exists.']}",
+      "actual": "500 with detail: 'UNIQUE constraint failed: user_group.organization_id, user_group.name'",
+      "script": "/tmp/test_duplicate_name.py"
+    }
+  },
+  "confidence": 0.98,
+  "adversarial_checks": {
+    "misleading_success_output": {
+      "status": "PASS",
+      "evidence": "All mutations check result.error and surface failures inline; no optimistic state on dataset toggles (line 499: checkbox disabled and unchecked while pending); test 'keeps checkboxes in server state while a grant is in flight' verifies no stale success"
+    },
+    "stale_state": {
+      "status": "PASS",
+      "evidence": "selectedIdRef guards against stale async writes (lines 108-111, 154, 169); loadGroups refreshes after mutations; mountedRef prevents state updates after unmount"
+    },
+    "dirty_worktree": {
+      "status": "PASS",
+      "evidence": "git status shows only expected modifications (Admin pages, ApiConfig, Menubar, users views/urls) and new files (Admin/, admin.ts, test files); no unrelated changes"
+    },
+    "accessibility": {
+      "status": "PASS",
+      "evidence": "aria-label on lists (lines 418, 503, 547, 756); aria-current on selected group (line 426); aria-label on dataset checkboxes (line 555); semantic HTML (ul/li, section, aside, main); keyboard-accessible buttons and inputs"
+    },
+    "error_handling": {
+      "status": "PARTIAL",
+      "evidence": "UI handles all error responses and surfaces them inline without fake success; however, duplicate-name 500 exposes raw database error to user (technical message, not user-friendly); this is a UX rough edge, not a functional blocker"
+    }
+  },
+  "duplicate_name_verdict": "acceptable_with_note",
+  "duplicate_name_reasoning": "The 500 on duplicate group name is a backend validation gap (missing UniqueTogetherValidator in UserGroupSerializer), but: (1) the UI correctly surfaces the error without fake success, (2) the plan's T7 did not specify duplicate-name handling, (3) DRF convention is 400 but 500 is not a security/correctness issue, (4) the error message is technical but visible. This is an acceptable rough edge that should be noted for future improvement (add UniqueTogetherValidator to return 400 with friendly message), but does not block T13 delivery. The same gap does NOT affect UserGroupMember/UserGroupProject because their views use get_or_create for idempotent 201 responses.",
+  "recommendations": [
+    "Add UniqueTogetherValidator(['organization', 'name']) to UserGroupSerializer.Meta.validators for proper 400 response",
+    "Consider user-friendly error message mapping in failureMessage() for common database errors",
+    "Document the duplicate-name behavior in admin guide"
+  ]
+}

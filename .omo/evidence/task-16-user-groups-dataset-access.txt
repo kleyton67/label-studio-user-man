@@ -1,0 +1,125 @@
+=== T16 evidence — 2026-11-17T03:18:19Z ===
+Worktree: /root/workspace/projetos/label-studio-wt/ugda-wave5 (branch: ulw/user-groups-dataset-access-wave5)
+
+--- 0. Pre-existing worktree state (BEFORE T16 edits, captured at start) ---
+ M label_studio/groups/serializers.py   (pre-existing, NOT touched by T16)
+ M label_studio/groups/tests/test_api.py (pre-existing, NOT touched by T16)
+?? docs/source/guide/admin.md           (pre-existing untracked)
+?? label_studio/tests/test_admin_groups_integration.py (pre-existing untracked)
+
+--- 1. Baseline BEFORE fix: pytest label_studio/users/tests/test_hotkeys_api.py -vv ---
+Command: cd /root/workspace/projetos/label-studio-wt/ugda-wave5 && DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_hotkeys_api.py -vv
+Result: 5 failed, 17 passed, 10 subtests passed in 37.33s
+FAILED ...test_empty_project_hotkeys_deletes_preference - assert 403 == 200
+FAILED ...test_get_project_hotkeys_without_preference - assert 403 == 200
+FAILED ...test_patch_project_hotkeys_creates_preference_not_membership - assert 403 == 200
+FAILED ...test_project_hotkeys_are_isolated_by_project - assert 403 == 200
+FAILED ...test_project_hotkeys_are_isolated_by_user - assert 403 == 200
+Root cause: users/hotkeys.py:23 project.has_permission -> restrictive access (no group grant) -> PermissionDenied
+
+--- 2. Baseline BEFORE format: bunx biome check apps/labelstudio/src/pages/Admin ---
+Result: Checked 7 files. No fixes applied. Found 3 errors. Found 1 warning. (exit != 0)
+3 format errors: GroupsPage.jsx, GroupsPage.test.jsx, index.js (trailing blank line / line-wrap)
+
+--- 3. AFTER fix: pytest (full run) ---
+Command: cd /root/workspace/projetos/label-studio-wt/ugda-wave5 && DJANGO_DB=sqlite uv run pytest label_studio/users/tests/test_hotkeys_api.py -vv
+============================= test session starts ==============================
+platform linux -- Python 3.13.13, pytest-9.0.3, pluggy-1.6.0 -- /root/workspace/projetos/label-studio-wt/ugda-wave5/.venv/bin/python
+cachedir: .pytest_cache
+django: version: 5.2.17, settings: core.settings.label_studio (from ini)
+rootdir: /root/workspace/projetos/label-studio-wt/ugda-wave5
+configfile: pyproject.toml
+plugins: xdist-3.8.0, anyio-4.14.2, requests-mock-1.12.1, env-1.6.0, cov-7.1.0, django-4.12.0, tavern-3.3.3, Faker-40.8.0, mock-3.15.1
+collecting ... collected 23 items
+
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_empty_hotkeys PASSED [  4%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_get_hotkeys_authenticated PASSED [  8%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_get_hotkeys_empty_config PASSED [ 13%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_get_hotkeys_unauthenticated PASSED [ 17%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_missing_required_field PASSED [ 21%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_update_hotkeys_authenticated PASSED [ 26%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_update_hotkeys_invalid_data PASSED [ 30%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_update_hotkeys_partial PASSED [ 34%]
+label_studio/users/tests/test_hotkeys_api.py::UserHotkeysAPITestCase::test_update_hotkeys_unauthenticated PASSED [ 39%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_cross_organization_project_returns_not_found PASSED [ 43%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_empty_project_hotkeys_deletes_preference PASSED [ 47%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_get_project_hotkeys_without_preference PASSED [ 52%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_invalid_project_hotkeys_return_bad_request PASSED [ 56%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_invalid_project_patch_never_updates_account_hotkeys 
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_invalid_project_patch_never_updates_account_hotkeys PASSED [ 60%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_malformed_project_id_returns_bad_request PASSED [ 65%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_member_without_group_grant_gets_forbidden PASSED [ 69%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_patch_project_hotkeys_creates_preference_not_membership PASSED [ 73%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_present_invalid_project_values_return_bad_request 
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_present_invalid_project_values_return_bad_request PASSED [ 78%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_project_hotkeys_are_isolated_by_project PASSED [ 82%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_project_hotkeys_are_isolated_by_user PASSED [ 86%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_same_organization_inaccessible_project_returns_forbidden PASSED [ 91%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_view_only_user_cannot_get_hotkeys PASSED [ 95%]
+label_studio/users/tests/test_hotkeys_api.py::ProjectHotkeysAPITestCase::test_view_only_user_cannot_patch_hotkeys PASSED [100%]
+
+=================== 23 passed, 10 subtests passed in 38.32s ====================
+PYTEST_EXIT=0
+
+--- 4. AFTER format: bunx biome check --write (3 T14 files only) ---
+Command: bunx biome check --write apps/labelstudio/src/pages/Admin/GroupsPage.jsx apps/labelstudio/src/pages/Admin/GroupsPage.test.jsx apps/labelstudio/src/pages/Admin/index.js
+Result: Checked 3 files in 63ms. Fixed 3 files. Found 1 warning (pre-existing ds/raw-control lint advisory on GroupsPage.jsx raw <button>; warning, not an error).
+
+--- 5. Verification: bunx biome check apps/labelstudio/src/pages/Admin ---
+Command: bunx biome check apps/labelstudio/src/pages/Admin
+apps/labelstudio/src/pages/Admin/GroupsPage.jsx:426:15 plugin ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! [ds/raw-control] Use Button from @humansignal/ui (look filled, outlined or ghost; aria-label when icon-only), not a raw <button>.
+  
+    424 │           return (
+    425 │             <li key={group.id} className="flex items-stretch">
+  > 426 │               <button
+        │               ^^^^^^^
+  > 427 │                 type="button"
+         ...
+  > 443 │                 ) : null}
+  > 444 │               </button>
+        │               ^^^^^^^^^
+    445 │               <div className="flex items-center">
+    446 │                 <Dropdown.Trigger
+  
+
+Checked 7 files in 52ms. No fixes applied.
+Found 1 warning.
+BIOME_EXIT=0
+
+--- 6. Frontend Admin tests after format: bun test --dom apps/labelstudio/src/pages/Admin ---
+Command: bun test --dom apps/labelstudio/src/pages/Admin
+bun test v1.3.14 (0d9b296a)
+
+ 47 pass
+ 0 fail
+ 161 expect() calls
+Ran 47 tests across 3 files. [5.10s]
+BUNTEST_EXIT=0
+
+--- 7. Worktree state AFTER T16 (scope audit) ---
+ M label_studio/groups/serializers.py
+ M label_studio/groups/tests/test_api.py
+ M label_studio/users/tests/test_hotkeys_api.py
+ M web/apps/labelstudio/src/pages/Admin/GroupsPage.jsx
+ M web/apps/labelstudio/src/pages/Admin/GroupsPage.test.jsx
+ M web/apps/labelstudio/src/pages/Admin/index.js
+?? docs/source/guide/admin.md
+?? label_studio/tests/test_admin_groups_integration.py
+
+--- 8. git diff --stat AFTER T16 ---
+ label_studio/groups/serializers.py                 | 24 +++++++
+ label_studio/groups/tests/test_api.py              | 26 +++++++
+ label_studio/users/tests/test_hotkeys_api.py       | 34 +++++++++
+ .../labelstudio/src/pages/Admin/GroupsPage.jsx     | 81 ++++++++++++----------
+ .../src/pages/Admin/GroupsPage.test.jsx            | 44 +++++++++---
+ web/apps/labelstudio/src/pages/Admin/index.js      |  1 -
+ 6 files changed, 163 insertions(+), 47 deletions(-)
+
+--- 9. Manual QA ---
+Real surface for this deliverable = the test run itself (pytest -vv above, exit 0).
+Live server check on /api/current-user/hotkeys/?project=<id> (port 50094): NOT attempted —
+spinning up runserver + seed data is heavy for a tests+format-only deliverable and
+the exact behavior (403 no-grant, 200 granted) is covered by
+test_member_without_group_grant_gets_forbidden and the granted-member 200 tests above.

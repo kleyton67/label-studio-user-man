@@ -1,0 +1,88 @@
+{
+  "verdict": "CONFIRMED_WITH_NOTE",
+  "failure_class": null,
+  "task": "T12 - Admin UsersPage",
+  "evidence": {
+    "files_exist": {
+      "UsersPage.jsx": "web/apps/labelstudio/src/pages/Admin/UsersPage.jsx (619 lines)",
+      "UsersPage.test.jsx": "web/apps/labelstudio/src/pages/Admin/UsersPage.test.jsx (479 lines)",
+      "AdminPage.jsx": "web/apps/labelstudio/src/pages/Admin/AdminPage.jsx (39 lines)",
+      "index.js": "web/apps/labelstudio/src/pages/Admin/index.js (2 lines)"
+    },
+    "registration": {
+      "AdminPage.jsx": "line 38: pages: { UsersPage }",
+      "index.js": "line 2: export { UsersPage } from './UsersPage'",
+      "pages/index.js": "line 5: import { AdminPage } from './Admin'; line 13: AdminPage in Pages array"
+    },
+    "unit_tests": {
+      "command": "bun run ls:unit src/pages/Admin",
+      "result": "67 pass, 0 fail, 131 expect() calls, Ran 67 tests across 6 files. [3.09s]",
+      "status": "GREEN"
+    },
+    "build": {
+      "command": "bun run build",
+      "result": "✓ 11288 modules transformed. ✓ built in 25.23s",
+      "status": "GREEN"
+    },
+    "playwright_qa": {
+      "status": "NOT_REPRODUCED",
+      "reason": "Not feasible in this environment (requires Django + vite HMR setup). Relying on 67 unit tests + code inspection.",
+      "note": "Task explicitly allows this fallback: 'If not feasible, say so explicitly and rely on the component tests + code inspection.'"
+    },
+    "owner_heuristic": {
+      "client_implementation": "UsersPage.jsx lines 112-115: Math.min(...adminIds) among is_admin users",
+      "server_authority": "api.py lines 581-587: perform_destroy checks instance.has_organization (models.py line 192: Organization.objects.filter(created_by=self).exists()) and raises PermissionDenied (403) for the owner",
+      "can_be_wrong": true,
+      "scenario": "If org created by user A (id=5) and user B (id=2) later promoted to admin, client thinks B is owner but server knows A is",
+      "worst_case": {
+        "false_positive": "UI disables Delete for non-owner admin (annoying but safe)",
+        "false_negative": "UI enables Delete for real owner, but server blocks with 403 (safe)"
+      },
+      "verdict": "ACCEPTABLE_WITH_NOTE",
+      "rationale": "Heuristic is UX optimization, not security boundary. Server is authority. No data loss or privilege escalation possible."
+    },
+    "t10_endpoints": {
+      "used": ["adminUsers", "createAdminUser", "updateAdminUser", "deleteAdminUser", "adminUserGroups", "updateAdminUserGroups"],
+      "defined_in_ApiConfig": "lines 20-27",
+      "status": "CONFIRMED"
+    },
+    "security": {
+      "password_handling": "Only sent in create body (line 184), type='password' input (line 499), autoComplete='new-password' (line 503)",
+      "token_leakage": "None found",
+      "status": "CLEAN"
+    },
+    "adversarial_checks": {
+      "misleading_success_output": {
+        "status": "PASS",
+        "evidence": "Tests verify actual API calls (api.calls.find) and state changes (screen.findByText), not just UI rendering"
+      },
+      "stale_state": {
+        "status": "PASS",
+        "evidence": "Tests use stateful fake API (makeApi) that mutates in-memory rows, so refresh-after-write is observable"
+      },
+      "dirty_worktree": {
+        "status": "PASS",
+        "evidence": "Git status shows only expected changes: Admin/ is untracked (new), other files modified as expected (urls.py, views.py, Menubar.jsx, ApiConfig.js, pages/index.js)"
+      },
+      "accessibility": {
+        "status": "PASS",
+        "evidence": "Semantic HTML: buttons with aria-label (line 371), inputs with labels (lines 487-516), aria-disabled for disabled actions (line 303), ConfirmDialog for destructive action (line 589)"
+      },
+      "error_handling": {
+        "status": "PASS",
+        "evidence": "Tests verify server 400 messages are surfaced (test lines 252-276: 'user with this email address already exists.'), failureMessage helper extracts validation_errors/detail (UsersPage.jsx lines 37-54)"
+      }
+    }
+  },
+  "repro": {
+    "unit_tests_command": "cd web && bun run ls:unit src/pages/Admin",
+    "unit_tests_output": "67 pass, 0 fail, 131 expect() calls",
+    "build_command": "cd web && bun run build",
+    "build_output": "✓ built in 25.23s",
+    "playwright_qa": "NOT_ATTEMPTED (not feasible in this environment)"
+  },
+  "confidence": 0.95,
+  "confidence_rationale": "High confidence in file existence, registration, unit tests (67 green), build (green), endpoint usage, security, and adversarial checks. Owner heuristic analysis is sound but relies on code inspection, not runtime verification. Playwright QA not reproduced (explicitly allowed fallback). Deducted 0.05 for unverified Playwright claim."
+}
+
+OWNER-HEURISTIC: acceptable-with-note (client heuristic Math.min(adminIds) can misidentify owner when a lower-id user was promoted to admin after org creation, but server authority via has_organization + 403 PermissionDenied makes this a UX-only issue with no security or data-loss risk)

@@ -1,0 +1,3 @@
+SCREENSHOT NOT CAPTURED - Browser automation (Playwright/Selenium) not available.
+API verification confirms member user has is_admin=False flag set correctly.
+Member gets 403 on admin-only endpoints, confirming access control works.
