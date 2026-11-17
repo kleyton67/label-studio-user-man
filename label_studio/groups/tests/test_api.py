@@ -80,6 +80,32 @@ class TestAdminGroupCrud:
         assert group.organization_id == organization.id
         assert group.created_by_id == admin.id
 
+    def test_duplicate_name_in_same_organization_returns_400(self, client, admin, organization):
+        UserGroupFactory(organization=organization, name='Data squad', created_by=admin)
+        client.force_authenticate(user=admin)
+        response = client.post(
+            reverse('admin-group-list'),
+            {'name': 'Data squad', 'description': 'duplicate'},
+            format='json',
+        )
+
+        assert response.status_code == 400
+        assert 'A group with this name already exists in the organization.' in response.content.decode()
+        assert UserGroup.objects.filter(organization=organization, name='Data squad').count() == 1
+
+    def test_same_name_in_other_organization_is_allowed(self, client, admin, organization):
+        other_organization = OrganizationFactory()
+        UserGroupFactory(organization=other_organization, name='Data squad', created_by=other_organization.created_by)
+        client.force_authenticate(user=admin)
+        response = client.post(
+            reverse('admin-group-list'),
+            {'name': 'Data squad', 'description': 'other org'},
+            format='json',
+        )
+
+        assert response.status_code == 201
+        assert UserGroup.objects.filter(organization=organization, name='Data squad').count() == 1
+
     def test_create_ignores_client_supplied_organization_and_created_by(self, client, admin, organization):
         other_organization = OrganizationFactory()
         client.force_authenticate(user=admin)

@@ -12,6 +12,30 @@ class UserGroupSerializer(serializers.ModelSerializer):
         fields = ['id', 'organization', 'name', 'description', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ['id', 'organization', 'created_by', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        # organization is read-only (set in perform_create), so UniqueTogetherValidator
+        # cannot see it and would reject every create as "This field is required." --
+        # resolve it from the request context and enforce unique_together here.
+        name = attrs.get('name')
+        if not name:
+            return attrs
+
+        organization = attrs.get('organization')
+        if organization is None:
+            request = self.context.get('request')
+            organization = getattr(getattr(request, 'user', None), 'active_organization', None)
+        if organization is None:
+            return attrs
+
+        conflicts = UserGroup.objects.filter(organization=organization, name=name)
+        if self.instance is not None:
+            conflicts = conflicts.exclude(pk=self.instance.pk)
+        if conflicts.exists():
+            raise serializers.ValidationError(
+                {'name': 'A group with this name already exists in the organization.'}
+            )
+        return attrs
+
 
 class UserGroupMemberSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())

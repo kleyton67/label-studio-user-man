@@ -4,6 +4,7 @@ from unittest.mock import PropertyMock, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from groups.models import UserGroup, UserGroupMember, UserGroupProject
 from projects.models import ProjectHotkeyPreference, ProjectMember
 from projects.tests.factories import ProjectFactory
 from rest_framework import status
@@ -131,10 +132,26 @@ class UserHotkeysAPITestCase(TestCase):
 class ProjectHotkeysAPITestCase(TestCase):
     """Tests for project-scoped personal hotkey preferences."""
 
+    @staticmethod
+    def _grant_project_access(user, project):
+        """Grant ``user`` access to ``project`` through a group (restrictive access layer).
+
+        Mirrors the pattern in ``data_manager/tests/test_api.py``: without a group grant,
+        ``Project.has_permission`` denies non-admin members of the same organization.
+        """
+        group = UserGroup.objects.create(
+            organization=project.organization,
+            name=f'HotkeysGroup-{user.id}-{project.id}',
+            created_by=project.organization.created_by,
+        )
+        UserGroupMember.objects.create(group=group, user=user)
+        UserGroupProject.objects.create(group=group, project=project)
+
     def setUp(self):
         self.client = APIClient()
         self.project = ProjectFactory()
         self.user = UserFactory(active_organization=self.project.organization)
+        self._grant_project_access(self.user, self.project)
         self.client.force_authenticate(user=self.user)
         self.url = reverse('current-user-hotkeys')
         self.valid_payload = {
@@ -294,6 +311,23 @@ class ProjectHotkeysAPITestCase(TestCase):
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert not ProjectHotkeyPreference.objects.filter(user=self.user, project=self.project).exists()
+
+    def test_member_without_group_grant_gets_forbidden(self):
+        """A same-organization member with no group grant is denied on the project-scoped endpoint."""
+        ungranted_user = UserFactory(active_organization=self.project.organization)
+        assert not UserGroupMember.objects.filter(user=ungranted_user).exists()
+        self.client.force_authenticate(user=ungranted_user)
+
+        get_response = self.client.get(self.url, {'project': self.project.id})
+        patch_response = self.client.patch(
+            f'{self.url}?project={self.project.id}',
+            data=self.valid_payload,
+            format='json',
+        )
+
+        assert get_response.status_code == status.HTTP_403_FORBIDDEN
+        assert patch_response.status_code == status.HTTP_403_FORBIDDEN
+        assert not ProjectHotkeyPreference.objects.filter(user=ungranted_user, project=self.project).exists()
 
     def test_invalid_project_hotkeys_return_bad_request(self):
         """Project-scoped hotkeys use the existing payload validation."""
