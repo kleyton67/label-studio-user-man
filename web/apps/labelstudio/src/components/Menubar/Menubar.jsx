@@ -12,6 +12,7 @@ import {
   IconDoor,
   IconGithub,
   IconSlack,
+  IconSettings,
 } from "@humansignal/icons";
 import { LSLogo } from "../../assets/images";
 import { Button, Avatar, ThemeToggle } from "@humansignal/ui";
@@ -238,6 +239,7 @@ export const Menubar = ({ enabled, defaultOpened, defaultPinned, children, onSid
                 <Menu.Item label="Home" to="/" icon={<IconHome />} data-external exact />
                 <Menu.Item label="Projects" to="/projects" icon={<IconFolder />} data-external exact />
                 <Menu.Item label="Organization" to="/organization" icon={<IconPeople />} data-external exact />
+                {user?.is_admin && <Menu.Item label="Admin" to="/admin" icon={<IconSettings />} data-external exact />}
 
                 <Menu.Spacer />
 

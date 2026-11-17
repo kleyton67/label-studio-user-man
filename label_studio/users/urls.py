@@ -22,6 +22,10 @@ urlpatterns = [
     path('user/reauthenticate/', views.user_reauthenticate, name='user-reauthenticate'),
     path('user/account/<sub_path>', views.user_account, name='user-account-anything'),
     re_path(r'^logout/?$', views.logout, name='logout'),
+    # Admin area pages (React shell; served logged-in, gated by is_admin in the UI and by the admin APIs)
+    path('admin/', views.admin_view, name='admin-area'),
+    path('admin/users/', views.admin_view, name='admin-area-users'),
+    path('admin/groups/', views.admin_view, name='admin-area-groups'),
     # Token
     path('api/current-user/reset-token/', api.UserResetTokenAPI.as_view(), name='current-user-reset-token'),
     path('api/current-user/token', api.UserGetTokenAPI.as_view(), name='current-user-token'),
